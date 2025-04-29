@@ -379,12 +379,17 @@
                                 <label for="model_select" class="form-label">Select Model for Prediction</label>
                                 <select class="form-select" id="model_select" name="model_path">
                                     {% for model in models %}
-                                    <option value="{{ model.path }}" {% if loop.first %}selected{% endif %}>
+                                    <option value="{{ model.path }}" 
+                                        {% if default_model_index is defined and default_model_index == loop.index0 %}
+                                            selected
+                                        {% elif default_model_index is not defined and loop.first %}
+                                            selected
+                                        {% endif %}>
                                         {{ model.name }} ({{ model.modified }})
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <div class="form-text">Choose the model to use for embryo quality prediction.</div>
+                                <div class="form-text">Choose the model to use for embryo quality prediction. Default: ResNet152.</div>
                             </div>
                             {% else %}
                             <div class="alert alert-warning">

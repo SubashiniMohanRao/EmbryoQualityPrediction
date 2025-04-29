@@ -739,13 +739,26 @@ def batch_validate_images():
         # Sort models by modification time (newest first)
         models.sort(key=lambda x: x['modified'], reverse=True)
         
+        # Find the ResNet152 model if available
+        default_model_index = None
+        for i, model in enumerate(models):
+            if 'resnet152_final.pth' in model['path'].lower():
+                default_model_index = i
+                break
+        
         # Handle file upload
         if request.method == 'POST':
             # Check if model is selected
             model_path = request.form.get('model_path')
             if not model_path and models:
-                model_path = models[0]['path']
-                print(f"No model specified, using default: {model_path}")
+                # Set default model to ResNet152_final.pth if available
+                default_model = next((m for m in models if 'resnet152_final.pth' in m['path'].lower()), None)
+                if default_model:
+                    model_path = default_model['path']
+                    print(f"Using default model: {model_path}")
+                else:
+                    model_path = models[0]['path']
+                    print(f"ResNet152_final.pth not found, using first available model: {model_path}")
             
             # Check if files were uploaded
             if 'files[]' not in request.files:
@@ -881,7 +894,9 @@ def batch_validate_images():
                 return redirect(request.url)
         
         # GET request - show upload form
-        return render_template('batch_validate.html', models=models)
+        return render_template('batch_validate.html', 
+                              models=models, 
+                              default_model_index=default_model_index)
     
     except Exception as e:
         # Catch-all exception handler
