@@ -15,6 +15,8 @@ sys.path.append(PROJECT_ROOT)
 
 # Import the Config class from train_model
 from src.train_model import Config, get_transforms
+# Import database functions
+from src.db_utils import save_prediction as save_to_db
 
 class EmbryoPredictor:
     def __init__(self, model_path=None):
@@ -310,12 +312,13 @@ class EmbryoPredictor:
         except Exception as e:
             raise ValueError(f"Error preprocessing image: {e}")
     
-    def predict(self, image_path):
+    def predict(self, image_path, patient_name=None):
         """
         Predict the class of an embryo image.
         
         Args:
             image_path (str): Path to the image file
+            patient_name (str, optional): Name of the patient
             
         Returns:
             dict: Prediction results including class, confidence, and all class probabilities
@@ -376,9 +379,10 @@ class EmbryoPredictor:
                 # Create result dictionary
                 result = {
                     'image_path': image_path,
-                    'predicted_class_index': predicted_class,
+                    'patient_name': patient_name,
+                    'predicted_class_index': int(predicted_class),  # Ensure this is an integer
                     'predicted_class': self.class_names[predicted_class],
-                    'confidence': confidence,
+                    'confidence': float(confidence),  # Ensure this is a float
                     'probabilities': probabilities,
                     'class_names': self.class_names,
                     'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -391,45 +395,54 @@ class EmbryoPredictor:
             traceback.print_exc()
             raise ValueError(f"Error predicting image: {e}")
     
-    def predict_batch(self, image_paths):
+    def predict_batch(self, image_paths, patient_names=None):
         """
         Predict classes for multiple embryo images.
         
         Args:
             image_paths (list): List of paths to image files
+            patient_names (list, optional): List of patient names corresponding to each image
             
         Returns:
             list: List of prediction results
         """
         results = []
-        for image_path in image_paths:
+        for i, image_path in enumerate(image_paths):
             try:
-                result = self.predict(image_path)
+                patient_name = patient_names[i] if patient_names and i < len(patient_names) else None
+                result = self.predict(image_path, patient_name)
                 results.append(result)
             except Exception as e:
                 print(f"Error predicting {image_path}: {e}")
                 results.append({
                     'image_path': image_path,
+                    'patient_name': patient_names[i] if patient_names and i < len(patient_names) else None,
                     'error': str(e)
                 })
         
         return results
     
-    def save_prediction(self, prediction, output_dir=None):
+    def save_prediction(self, prediction, output_dir=None, save_to_database=True, db_config=None):
         """
-        Save prediction results to a JSON file.
+        Save prediction results to a JSON file and/or database.
         
         Args:
             prediction (dict): Prediction result
             output_dir (str, optional): Directory to save results. Defaults to outputs/predictions.
+            save_to_database (bool, optional): Whether to save to database. Defaults to True.
+            db_config (dict, optional): Database configuration. Defaults to None (uses default config).
             
         Returns:
-            str: Path to the saved file
+            dict: Dictionary with paths to saved files and/or DB ID
         """
-        if output_dir is None:
-            output_dir = os.path.join(PROJECT_ROOT, "outputs", "predictions")
+        result = {}
         
-        os.makedirs(output_dir, exist_ok=True)
+        # Save to file
+        if output_dir is not None:
+            os.makedirs(output_dir, exist_ok=True)
+        else:
+            output_dir = os.path.join(PROJECT_ROOT, "outputs", "predictions")
+            os.makedirs(output_dir, exist_ok=True)
         
         # Create filename from image name and timestamp
         image_name = os.path.basename(prediction['image_path'])
@@ -440,7 +453,21 @@ class EmbryoPredictor:
         with open(output_file, 'w') as f:
             json.dump(prediction, f, indent=4)
         
-        return output_file
+        result['file_path'] = output_file
+        
+        # Save to database if requested
+        if save_to_database:
+            try:
+                prediction_id = save_to_db(prediction, db_config)
+                if prediction_id:
+                    result['database_id'] = prediction_id
+                    print(f"Saved prediction to database with ID: {prediction_id}")
+                else:
+                    print("Failed to save prediction to database")
+            except Exception as e:
+                print(f"Error saving to database: {e}")
+        
+        return result
 
 
 def main():
@@ -449,8 +476,14 @@ def main():
     
     parser = argparse.ArgumentParser(description='Predict embryo image quality')
     parser.add_argument('--image', type=str, help='Path to image file')
+    parser.add_argument('--patient', type=str, help='Patient name')
     parser.add_argument('--model', type=str, help='Path to model file')
     parser.add_argument('--output', type=str, help='Output directory for prediction results')
+    parser.add_argument('--no-db', action='store_true', help='Do not save to database')
+    parser.add_argument('--db-host', type=str, default='localhost', help='Database host')
+    parser.add_argument('--db-user', type=str, default='suba', help='Database username')
+    parser.add_argument('--db-password', type=str, default='Suba@123', help='Database password')
+    parser.add_argument('--db-name', type=str, default='embryo_predictions', help='Database name')
     args = parser.parse_args()
     
     if args.image is None:
@@ -460,17 +493,34 @@ def main():
     predictor = EmbryoPredictor(args.model)
     
     # Make prediction
-    result = predictor.predict(args.image)
+    result = predictor.predict(args.image, args.patient)
+    
+    # Prepare database config
+    db_config = {
+        'host': args.db_host,
+        'user': args.db_user,
+        'password': args.db_password,
+        'database': args.db_name
+    }
     
     # Save prediction
-    output_file = predictor.save_prediction(result, args.output)
+    save_result = predictor.save_prediction(
+        result, 
+        args.output, 
+        save_to_database=not args.no_db,
+        db_config=db_config
+    )
     
     # Print results
     print("\n===== Prediction Results =====")
     print(f"Image: {result['image_path']}")
+    if result.get('patient_name'):
+        print(f"Patient: {result['patient_name']}")
     print(f"Predicted Class: {result['predicted_class']}")
     print(f"Confidence: {result['confidence']:.2%}")
-    print(f"Results saved to: {output_file}")
+    print(f"Results saved to: {save_result.get('file_path', 'N/A')}")
+    if save_result.get('database_id'):
+        print(f"Database record ID: {save_result['database_id']}")
 
 
 if __name__ == "__main__":

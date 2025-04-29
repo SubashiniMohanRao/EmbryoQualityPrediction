@@ -37,6 +37,9 @@ chart.js==3.9.1       # JavaScript charting library for data visualization
 # Model Evaluation and Metrics
 scipy==1.10.1         # Scientific computing library with statistical functions
 
+# Database
+mysql-connector-python==8.0.33  # MySQL database connector for Python
+
 # Utilities
 python-dotenv==1.0.0  # Environment variable management
 requests==2.31.0      # HTTP library for API requests

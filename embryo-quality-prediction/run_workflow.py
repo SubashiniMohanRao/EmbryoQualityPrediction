@@ -562,25 +562,140 @@ def main():
     print("\nTo view and compare all model reports, run:")
     print(f"python {os.path.join('src', 'model_report_generator.py')}")
 
+def predict_image(image_path, patient_name=None, model_path=None, output_dir=None, save_to_db=True, db_config=None):
+    """Predict the quality of an embryo image and save results.
+    
+    Args:
+        image_path (str): Path to the image file
+        patient_name (str, optional): Name of the patient
+        model_path (str, optional): Path to the model file
+        output_dir (str, optional): Directory to save results
+        save_to_db (bool, optional): Whether to save to database
+        db_config (dict, optional): Database configuration
+        
+    Returns:
+        dict: Prediction results
+    """
+    print_section_header("EMBRYO QUALITY PREDICTION")
+    
+    # Check if image exists
+    if not os.path.exists(image_path):
+        print(f"❌ Error: Image file not found: {image_path}")
+        return None
+        
+    try:
+        # Import predictor class
+        from src.predict_image import EmbryoPredictor
+        
+        # Initialize predictor
+        print(f"Initializing predictor with model: {model_path or 'latest model'}")
+        predictor = EmbryoPredictor(model_path)
+        
+        # Make prediction
+        print(f"Predicting image: {image_path}")
+        if patient_name:
+            print(f"Patient: {patient_name}")
+        result = predictor.predict(image_path, patient_name)
+        
+        # Prepare database config
+        if db_config is None and save_to_db:
+            db_config = {
+                'host': 'localhost',
+                'user': 'suba',
+                'password': 'Suba@123',
+                'database': 'embryo_predictions'
+            }
+        
+        # Save prediction
+        save_result = predictor.save_prediction(
+            result, 
+            output_dir, 
+            save_to_database=save_to_db,
+            db_config=db_config
+        )
+        
+        # Print results
+        print("\n===== Prediction Results =====")
+        print(f"Image: {result['image_path']}")
+        if result.get('patient_name'):
+            print(f"Patient: {result['patient_name']}")
+        print(f"Predicted Class: {result['predicted_class']}")
+        print(f"Confidence: {result['confidence']:.2%}")
+        if save_result:
+            print(f"Results saved to: {save_result.get('file_path', 'N/A')}")
+            if save_result.get('database_id'):
+                print(f"Database record ID: {save_result['database_id']}")
+        
+        return result
+    except Exception as e:
+        print(f"❌ Error predicting image: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 if __name__ == "__main__":
     # Parse command line arguments
     import argparse
     parser = argparse.ArgumentParser(description='Run embryo quality prediction workflow')
-    parser.add_argument('--test', action='store_true', help='Run in test mode with just 1 epoch')
+    
+    # Create subparsers for different commands
+    subparsers = parser.add_subparsers(dest='command', help='Command to run')
+    
+    # Workflow command (default)
+    workflow_parser = subparsers.add_parser('workflow', help='Run the embryo quality prediction workflow')
+    workflow_parser.add_argument('--test', action='store_true', help='Run in test mode with just 1 epoch')
+    
+    # Predict command
+    predict_parser = subparsers.add_parser('predict', help='Predict embryo quality from an image')
+    predict_parser.add_argument('--image', type=str, required=True, help='Path to image file')
+    predict_parser.add_argument('--patient', type=str, help='Patient name')
+    predict_parser.add_argument('--model', type=str, help='Path to model file')
+    predict_parser.add_argument('--output', type=str, help='Output directory for prediction results')
+    predict_parser.add_argument('--no-db', action='store_true', help='Do not save to database')
+    predict_parser.add_argument('--db-host', type=str, default='localhost', help='Database host')
+    predict_parser.add_argument('--db-user', type=str, default='suba', help='Database username')
+    predict_parser.add_argument('--db-password', type=str, default='Suba@123', help='Database password')
+    predict_parser.add_argument('--db-name', type=str, default='embryo_predictions', help='Database name')
+    
+    # Setup database command
+    setup_db_parser = subparsers.add_parser('setup-db', help='Set up the database for storing predictions')
+    setup_db_parser.add_argument('--host', type=str, default='localhost', help='Database host')
+    setup_db_parser.add_argument('--user', type=str, default='suba', help='Database username')
+    setup_db_parser.add_argument('--password', type=str, default='Suba@123', help='Database password')
+    setup_db_parser.add_argument('--database', type=str, default='embryo_predictions', help='Database name')
+    
     args = parser.parse_args()
     
-    # If in test mode, override Config epochs
-    if args.test:
-        print("\n🧪 RUNNING IN TEST MODE - ONLY 1 EPOCH\n")
-        # Import and modify Config
-        from src.train_model import Config
-        Config.num_epochs = 1
-        print(f"Training will run for {Config.num_epochs} epoch only")
-    
     try:
-        main()
+        # Handle different commands
+        if args.command == 'predict':
+            # Configure database
+            db_config = {
+                'host': args.db_host,
+                'user': args.db_user,
+                'password': args.db_password,
+                'database': args.db_name
+            }
+            
+            # Run prediction
+            predict_image(args.image, args.patient, args.model, args.output, not args.no_db, db_config)
+        elif args.command == 'setup-db':
+            # Import and run database setup
+            from src.setup_database import setup_database
+            setup_database(args.host, args.user, args.password, args.database)
+        else:  # Default to workflow
+            # If in test mode, override Config epochs
+            if hasattr(args, 'test') and args.test:
+                print("\n🧪 RUNNING IN TEST MODE - ONLY 1 EPOCH\n")
+                # Import and modify Config
+                from src.train_model import Config
+                Config.num_epochs = 1
+                print(f"Training will run for {Config.num_epochs} epoch only")
+            
+            # Run the main workflow
+            main()
     except KeyboardInterrupt:
-        print("\nWorkflow interrupted by user.")
+        print("\nProcess interrupted by user.")
     except Exception as e:
         import traceback
         print(f"\nUnexpected error: {str(e)}")
@@ -588,5 +703,4 @@ if __name__ == "__main__":
         print("\nIf you're running in Google Colab and encountering package-related errors,")
         print("try running the following commands:")
         print("python -m pip install --force-reinstall blinker")
-        print("python -m pip install --ignore-installed torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch")
-        print("Then restart your Python environment and run the workflow again.")
+        print("python -m pip install --ignore-installed torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch mysql-connector-python")

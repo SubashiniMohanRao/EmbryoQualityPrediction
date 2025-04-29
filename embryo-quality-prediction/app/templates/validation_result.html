@@ -249,14 +249,16 @@
             </div>
         </div>
         
-        <div class="d-flex justify-content-between mt-4 mb-4">
-            <a href="{{ url_for('validate_image') }}" class="btn btn-outline-primary">
-                <i class="bi bi-arrow-left"></i> Validate Another Image
-            </a>
-            <a href="{{ url_for('index') }}" class="btn btn-primary">
-                <i class="bi bi-house"></i> Back to Dashboard
-            </a>
+        <div class="text-center mt-3">
+            <a href="{{ url_for('validate_image') }}" class="btn btn-primary"><i class="bi bi-arrow-left"></i> Validate Another Image</a>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-primary"><i class="bi bi-house"></i> Back to Dashboard</a>
         </div>
+        
+        {% if result.database_id %}
+        <div class="alert alert-info mt-3">
+            <i class="bi bi-database"></i> Saved to database with ID: <strong>{{ result.database_id }}</strong>
+        </div>
+        {% endif %}
         
         <footer class="text-center text-muted my-4">
             <p>Embryo Quality Prediction Project | Image Validation Tool</p>

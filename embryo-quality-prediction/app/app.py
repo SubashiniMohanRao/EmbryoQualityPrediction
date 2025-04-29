@@ -421,6 +421,9 @@ def validate_image():
         model_path = request.form.get('model_path')
         if not model_path and models:
             model_path = models[0]['path']
+            
+        # Get patient name if provided
+        patient_name = request.form.get('patient_name')
         
         # Check if the post request has the file part
         if 'file' not in request.files:
@@ -456,9 +459,12 @@ def validate_image():
                 
                 # Make prediction with detailed error handling
                 try:
-                    result = predictor.predict(file_path)
+                    # Pass patient_name directly to the predict method
+                    result = predictor.predict(file_path, patient_name)
                     if result is None:
                         raise ValueError("Prediction returned None result")
+                    
+                    print(f"Prediction made with patient name: {patient_name if patient_name else 'None'}")
                 except Exception as e:
                     flash(f"Error during prediction: {e}", "danger")
                     import traceback
@@ -479,9 +485,13 @@ def validate_image():
                     flash(f"Warning: Could not generate XAI visualization: {e}", "warning")
                     xai_result = None
                 
-                # Save prediction
+                # Save prediction to database and file
                 try:
-                    predictor.save_prediction(result)
+                    save_result = predictor.save_prediction(result, save_to_database=True)
+                    if save_result.get('database_id'):
+                        print(f"Saved prediction to database with ID: {save_result['database_id']}")
+                    else:
+                        print("Warning: Prediction saved to file but not to database")
                 except Exception as e:
                     # Non-critical error, just log it
                     print(f"Warning: Could not save prediction: {e}")
@@ -759,6 +769,10 @@ def batch_validate_images():
                 else:
                     model_path = models[0]['path']
                     print(f"ResNet152_final.pth not found, using first available model: {model_path}")
+                    
+            # Get patient name if provided
+            patient_name = request.form.get('patient_name')
+            print(f"Patient name: {patient_name if patient_name else 'Not provided'}")
             
             # Check if files were uploaded
             if 'files[]' not in request.files:
@@ -792,6 +806,12 @@ def batch_validate_images():
             results = []
             error_messages = []
             
+            # Create a list of patient names (same patient name for all images in this batch)
+            patient_names = [patient_name] * len(files)
+            print(f"Using patient name '{patient_name}' for all {len(files)} images in batch")
+            
+            file_paths = []
+            filenames = []
             for i, file in enumerate(files):
                 print(f"Processing file {i+1}/{len(files)}: {file.filename}")
                 if file and AppConfig.allowed_file(file.filename):
@@ -815,15 +835,37 @@ def batch_validate_images():
                         except Exception as e:
                             print(f"Warning: Could not resize image: {str(e)}")
                         
-                        # Make prediction
-                        print(f"Making prediction for {filename}")
-                        result = predictor.predict(file_path)
-                        if result is None:
-                            raise ValueError(f"Prediction returned None result for {filename}")
+                        file_paths.append(file_path)
+                        filenames.append(filename)
+                    except Exception as e:
+                        error_msg = f"Error processing {file.filename}: {str(e)}"
+                        print(f"Error: {error_msg}")
+                        error_messages.append(error_msg)
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    error_msg = f"Invalid file type for {file.filename}. Allowed types: {', '.join(AppConfig.ALLOWED_EXTENSIONS)}"
+                    print(f"Error: {error_msg}")
+                    error_messages.append(error_msg)
+            
+            # Process batch predictions if we have valid files
+            if file_paths:
+                try:
+                    print(f"Making batch predictions for {len(file_paths)} files with patient name: {patient_name}")
+                    # Pass patient_names list to predict_batch
+                    batch_results = predictor.predict_batch(file_paths, patient_names)
+                    
+                    # Process each result
+                    for i, result in enumerate(batch_results):
+                        if i >= len(filenames):
+                            continue
+                            
+                        filename = filenames[i]
+                        file_path = file_paths[i]
                         
                         # Generate XAI visualization
                         try:
-                            print(f"Generating XAI visualization")
+                            print(f"Generating XAI visualization for {filename}")
                             _, transform = get_transforms()
                             xai_result = generate_xai_visualization(
                                 model=predictor.model,
@@ -836,10 +878,15 @@ def batch_validate_images():
                             print(f"Warning: Could not generate XAI visualization for {filename}: {e}")
                             xai_result = None
                         
-                        # Save prediction
+                        # Save prediction to database and file
                         try:
-                            predictor.save_prediction(result)
-                            print(f"Saved prediction")
+                            save_result = predictor.save_prediction(result, save_to_database=True)
+                            if save_result.get('database_id'):
+                                print(f"Saved prediction to database with ID: {save_result['database_id']}")
+                                # Add database ID to result for display
+                                result['database_id'] = save_result['database_id']
+                            else:
+                                print(f"Warning: Prediction for {filename} saved to file but not to database")
                         except Exception as e:
                             print(f"Warning: Could not save prediction for {filename}: {e}")
                         
@@ -848,31 +895,26 @@ def batch_validate_images():
                             with open(file_path, "rb") as image_file:
                                 encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
                             print(f"Encoded image to base64")
+                            
+                            # Add result to list
+                            results.append({
+                                'filename': filename,
+                                'result': result,
+                                'image_data': encoded_image,
+                                'xai_data': xai_result['xai_image'] if xai_result else None,
+                                'database_id': result.get('database_id')
+                            })
+                            print(f"Added result for {filename}")
                         except Exception as e:
                             error_msg = f"Error encoding image {filename}: {str(e)}"
                             print(f"Error: {error_msg}")
                             error_messages.append(error_msg)
-                            continue
-                        
-                        # Add result to list
-                        results.append({
-                            'filename': filename,
-                            'result': result,
-                            'image_data': encoded_image,
-                            'xai_data': xai_result['xai_image'] if xai_result else None
-                        })
-                        print(f"Added result for {filename}")
-                        
-                    except Exception as e:
-                        error_msg = f"Error processing {file.filename}: {str(e)}"
-                        print(f"Error: {error_msg}")
-                        error_messages.append(error_msg)
-                        import traceback
-                        traceback.print_exc()
-                else:
-                    error_msg = f"Invalid file type for {file.filename}. Allowed types: {', '.join(AppConfig.ALLOWED_EXTENSIONS)}"
+                except Exception as e:
+                    error_msg = f"Error processing batch predictions: {str(e)}"
                     print(f"Error: {error_msg}")
                     error_messages.append(error_msg)
+                    import traceback
+                    traceback.print_exc()
             
             if results:
                 # Show any errors that occurred during processing

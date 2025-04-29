@@ -391,6 +391,12 @@
                                 </select>
                                 <div class="form-text">Choose the model to use for embryo quality prediction. Default: ResNet152.</div>
                             </div>
+                            
+                            <div class="mb-4">
+                                <label for="patient_name" class="form-label"><i class="bi bi-person"></i> Patient Name (optional)</label>
+                                <input type="text" class="form-control" id="patient_name" name="patient_name" placeholder="Enter patient name for identification">
+                                <div class="form-text">Providing a patient name helps organize and identify prediction results.</div>
+                            </div>
                             {% else %}
                             <div class="alert alert-warning">
                                 <i class="bi bi-exclamation-triangle-fill"></i> No models found. Please train a model first or download pre-trained models.
