@@ -7,10 +7,11 @@ import uuid
 import base64
 import numpy as np
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, session
 from datetime import datetime
 import markdown
 import bleach
+import functools
 
 # Get the absolute path to the project root directory
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,9 +23,27 @@ from src.evaluate_model import ModelEvaluator, find_latest_model
 from src.predict_image import EmbryoPredictor
 from src.xai_utils import generate_xai_visualization
 from src.train_model import get_transforms
+# Import authentication module
+from src.auth_utils import AuthManager
 
 app = Flask(__name__)
 app.secret_key = 'embryo_quality_prediction_app'
+# Session configuration
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+
+# Authentication manager
+auth_manager = AuthManager()
+
+# Authentication middleware
+def login_required(view_func):
+    @functools.wraps(view_func)
+    def wrapped_view(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please sign in to access this page', 'warning')
+            return redirect(url_for('login', next=request.url))
+        return view_func(*args, **kwargs)
+    return wrapped_view
 
 # Configuration
 class AppConfig:
@@ -51,6 +70,7 @@ class AppConfig:
 
 
 @app.route('/')
+@login_required
 def index():
     """Home page showing model evaluation dashboard."""
     AppConfig.ensure_dirs()
@@ -99,6 +119,7 @@ def index():
 
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
     """Advanced dashboard showing comprehensive model evaluation results."""
     AppConfig.ensure_dirs()
@@ -212,6 +233,7 @@ def dashboard():
 
 
 @app.route('/evaluate', methods=['POST'])
+@login_required
 def evaluate_model():
     """Evaluate a model and generate a report."""
     model_path = request.form.get('model_path')
@@ -245,6 +267,7 @@ def evaluate_model():
 
 
 @app.route('/report/<path:report_path>')
+@login_required
 def view_report(report_path):
     """View a specific evaluation report."""
     # Check if the path is a directory or file
@@ -276,6 +299,7 @@ def view_report(report_path):
 
 
 @app.route('/compare', methods=['GET', 'POST'])
+@login_required
 def compare_models():
     """Compare multiple model evaluations."""
     AppConfig.ensure_dirs()
@@ -330,6 +354,7 @@ def compare_models():
 
 
 @app.route('/api/model_metrics')
+@login_required
 def api_model_metrics():
     """API endpoint to get model metrics for charts."""
     # First try to load from individual model result files
@@ -398,6 +423,7 @@ def api_model_metrics():
 
 
 @app.route('/validate', methods=['GET', 'POST'])
+@login_required
 def validate_image():
     """Validate embryo images using the trained model."""
     AppConfig.ensure_dirs()
@@ -531,12 +557,14 @@ def validate_image():
 
 
 @app.route('/uploads/<filename>')
+@login_required
 def uploaded_file(filename):
     """Serve uploaded files."""
     return send_from_directory(AppConfig.UPLOAD_DIR, filename)
 
 
 @app.route('/results/<path:filepath>')
+@login_required
 def serve_results(filepath):
     """Serve files from the results directory (images, plots, etc.)."""
     # Extract the directory part from the filepath
@@ -550,6 +578,7 @@ def serve_results(filepath):
 
 
 @app.route('/docs/<doc_name>')
+@login_required
 def view_docs(doc_name):
     """Render markdown documentation files as HTML."""
     # Get parent directory of PROJECT_ROOT
@@ -719,6 +748,7 @@ def view_docs(doc_name):
 
 
 @app.route('/batch_validate', methods=['GET', 'POST'])
+@login_required
 def batch_validate_images():
     """Validate multiple embryo images using the trained model."""
     try:
@@ -948,6 +978,75 @@ def batch_validate_images():
         traceback.print_exc()
         flash(error_msg, 'danger')
         return redirect(url_for('index'))
+
+# Authentication routes
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login page."""
+    next_url = request.args.get('next', url_for('index'))
+    
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        if not email or not password:
+            flash('Please provide both email and password', 'danger')
+            return render_template('login.html')
+        
+        # Authenticate user
+        user = auth_manager.authenticate_user(email, password)
+        
+        if user and 'error' not in user:
+            # Store user info in session
+            session['user_id'] = user['id']
+            session['email'] = user['email']
+            
+            flash('You have been logged in successfully', 'success')
+            return redirect(next_url)
+        else:
+            error_message = user.get('error', 'Authentication failed') if user else 'Authentication failed'
+            flash(error_message, 'danger')
+    
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """User registration page."""
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if not email or not password or not confirm_password:
+            flash('Please fill all required fields', 'danger')
+            return render_template('register.html')
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'danger')
+            return render_template('register.html')
+        
+        # Register new user
+        result = auth_manager.register_user(email, password)
+        
+        if result and 'error' not in result:
+            flash('Registration successful! You can now log in', 'success')
+            return redirect(url_for('login'))
+        else:
+            error_message = result.get('error', 'Registration failed') if result else 'Registration failed'
+            flash(error_message, 'danger')
+    
+    return render_template('register.html')
+
+@app.route('/logout')
+def logout():
+    """User logout."""
+    # Clear session
+    session.pop('user_id', None)
+    session.pop('email', None)
+    session.clear()
+    
+    flash('You have been logged out', 'info')
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

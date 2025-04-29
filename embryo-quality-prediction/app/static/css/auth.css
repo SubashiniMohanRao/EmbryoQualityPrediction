@@ -1,0 +1,130 @@
+/* Authentication system styling */
+body.auth-page {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f5f9fc;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.auth-container {
+    max-width: 450px;
+    width: 100%;
+    padding: 0 15px;
+}
+
+.card {
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    border: none;
+}
+
+.card-header {
+    background-color: #4a6fa5;
+    color: white;
+    text-align: center;
+    padding: 25px 0;
+    border-radius: 15px 15px 0 0 !important;
+    border: none;
+}
+
+.card-body {
+    padding: 40px 30px;
+}
+
+.hospital-icon {
+    font-size: 60px;
+    margin-bottom: 15px;
+    color: white;
+}
+
+.form-control {
+    padding: 12px 15px;
+    border-radius: 10px;
+    height: auto;
+    border: 1px solid #dee2e6;
+    margin-bottom: 15px;
+}
+
+.form-control:focus {
+    box-shadow: 0 0 0 0.25rem rgba(74, 111, 165, 0.25);
+    border-color: #4a6fa5;
+}
+
+.btn-primary {
+    background-color: #4a6fa5;
+    border-color: #4a6fa5;
+    padding: 12px 15px;
+    border-radius: 10px;
+    font-weight: 600;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.btn-primary:hover {
+    background-color: #3a5a8f;
+    border-color: #3a5a8f;
+}
+
+.auth-link {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.auth-link a {
+    color: #4a6fa5;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.auth-link a:hover {
+    text-decoration: underline;
+}
+
+.app-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin: 10px 0 0;
+    color: white;
+}
+
+.input-group-text {
+    background-color: transparent;
+    border-right: none;
+    padding-right: 0;
+}
+
+.with-icon {
+    border-left: none;
+    padding-left: 0;
+}
+
+.input-icon {
+    color: #4a6fa5;
+}
+
+/* User status in header */
+.user-status {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 10px 0;
+}
+
+.user-email {
+    margin-right: 15px;
+    font-weight: 500;
+}
+
+.user-icon {
+    margin-right: 5px;
+    color: #4a6fa5;
+}
+
+.btn-logout {
+    padding: 6px 12px;
+    border-radius: 5px;
+    font-size: 14px;
+} 

@@ -20,10 +20,17 @@ import importlib
 from os import path
 from datetime import datetime
 import torch
+import argparse
 
 # Import report generator and model report manager
 from src.simple_report import SimpleReportGenerator as ReportGenerator
 from src.model_report_generator import ModelReportManager
+
+# Import database utilities
+from src.setup_database import setup_database
+
+# Import authentication utilities
+from src.auth_utils import setup_auth_database
 
 # Check if running in Google Colab
 IN_COLAB = 'google.colab' in str(globals())
@@ -139,6 +146,75 @@ def run_module(module_name, module_path=None):
 
 def main():
     """Run the complete embryo classification workflow"""
+    # Create argument parser
+    parser = argparse.ArgumentParser(description='Embryo Classification Workflow')
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    
+    # Add setup-db command
+    setup_db_parser = subparsers.add_parser('setup-db', help='Setup the database')
+    setup_db_parser.add_argument('--host', default='localhost', help='Database host')
+    setup_db_parser.add_argument('--user', default='suba', help='Database username')
+    setup_db_parser.add_argument('--password', default='Suba@123', help='Database password')
+    setup_db_parser.add_argument('--database', default='embryo_predictions', help='Database name')
+    
+    # Add setup-auth command
+    setup_auth_parser = subparsers.add_parser('setup-auth', help='Setup the authentication database')
+    setup_auth_parser.add_argument('--host', default='localhost', help='Database host')
+    setup_auth_parser.add_argument('--user', default='suba', help='Database username')
+    setup_auth_parser.add_argument('--password', default='Suba@123', help='Database password')
+    setup_auth_parser.add_argument('--database', default='embryo_predictions', help='Database name')
+    
+    # Add web command
+    web_parser = subparsers.add_parser('web', help='Start the web application')
+    web_parser.add_argument('--host', default='0.0.0.0', help='Web server host')
+    web_parser.add_argument('--port', type=int, default=5000, help='Web server port')
+    web_parser.add_argument('--debug', action='store_true', help='Run in debug mode')
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Handle commands
+    if args.command == 'setup-db':
+        print_section_header("DATABASE SETUP")
+        success = setup_database(
+            host=args.host,
+            user=args.user,
+            password=args.password,
+            database=args.database
+        )
+        if success:
+            print("\n✅ Database setup completed successfully!")
+        else:
+            print("\n❌ Database setup failed. Check logs for details.")
+        return
+    
+    elif args.command == 'setup-auth':
+        print_section_header("AUTHENTICATION DATABASE SETUP")
+        success = setup_auth_database(
+            host=args.host,
+            user=args.user,
+            password=args.password,
+            database=args.database
+        )
+        if success:
+            print("\n✅ Authentication database setup completed successfully!")
+            print("\nTo start the application, run:")
+            print(f"python {__file__} web")
+            print("\nTo register a new user, open http://localhost:5000/register in your browser")
+        else:
+            print("\n❌ Authentication database setup failed. Check logs for details.")
+        return
+    
+    elif args.command == 'web':
+        print_section_header("STARTING WEB APPLICATION")
+        # Import app here to avoid circular imports
+        sys.path.append(path.join(PROJECT_ROOT, "app"))
+        from app.app import app
+        print(f"Starting web server on {args.host}:{args.port}")
+        app.run(host=args.host, port=args.port, debug=args.debug)
+        return
+    
+    # Continue with regular workflow if no command specified
     print_section_header("EMBRYO CLASSIFICATION WORKFLOW")
     print(f"Starting workflow at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Project root: {PROJECT_ROOT}")
@@ -664,6 +740,19 @@ if __name__ == "__main__":
     setup_db_parser.add_argument('--password', type=str, default='Suba@123', help='Database password')
     setup_db_parser.add_argument('--database', type=str, default='embryo_predictions', help='Database name')
     
+    # Setup authentication command
+    setup_auth_parser = subparsers.add_parser('setup-auth', help='Set up the authentication database')
+    setup_auth_parser.add_argument('--host', type=str, default='localhost', help='Database host')
+    setup_auth_parser.add_argument('--user', type=str, default='suba', help='Database username')
+    setup_auth_parser.add_argument('--password', type=str, default='Suba@123', help='Database password')
+    setup_auth_parser.add_argument('--database', type=str, default='embryo_predictions', help='Database name')
+    
+    # Web command
+    web_parser = subparsers.add_parser('web', help='Start the web application')
+    web_parser.add_argument('--host', default='0.0.0.0', help='Web server host')
+    web_parser.add_argument('--port', type=int, default=5000, help='Web server port')
+    web_parser.add_argument('--debug', action='store_true', help='Run in debug mode')
+    
     args = parser.parse_args()
     
     try:
@@ -683,6 +772,15 @@ if __name__ == "__main__":
             # Import and run database setup
             from src.setup_database import setup_database
             setup_database(args.host, args.user, args.password, args.database)
+        elif args.command == 'setup-auth':
+            # Import and run authentication setup
+            from src.auth_utils import setup_auth_database
+            setup_auth_database(args.host, args.user, args.password, args.database)
+        elif args.command == 'web':
+            # Import and run web application
+            sys.path.append(path.join(PROJECT_ROOT, "app"))
+            from app.app import app
+            app.run(host=args.host, port=args.port, debug=args.debug)
         else:  # Default to workflow
             # If in test mode, override Config epochs
             if hasattr(args, 'test') and args.test:

@@ -28,6 +28,11 @@ bleach==6.0.0         # HTML sanitizing library for secure content rendering
 python-markdown-math==0.8  # Math extension for Python-Markdown
 Pygments==2.15.1      # Syntax highlighting for code blocks in documentation
 Flask-WTF==1.1.1      # Flask integration with WTForms for form handling
+Flask-Session==0.5.0  # Server-side session support for Flask
+
+# Authentication
+bcrypt==4.0.1         # Password hashing library
+Flask-Login==0.6.2    # User session management for Flask
 
 # Data Visualization for Dashboard
 plotly==5.15.0        # Interactive visualization library
