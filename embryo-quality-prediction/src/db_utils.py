@@ -260,19 +260,18 @@ class DatabaseConnection:
         if self.connection and self.connection.is_connected():
             self.connection.close()
 
-def save_prediction(prediction, db_config=None):
-    """
-    Save prediction to MySQL database.
+
+def get_predictions_by_patient(patient_name=None, db_config=None):
+    """Get predictions by patient name or all predictions if patient_name is None.
     
     Args:
-        prediction (dict): Prediction result with optional patient_name field
-        db_config (dict, optional): Database configuration. 
-                                   Defaults to localhost, user=suba, password=Suba@123.
-    
+        patient_name (str, optional): Patient name to filter by. If None, returns all predictions.
+        db_config (dict): Database configuration.
+        
     Returns:
-        int: ID of the saved prediction or None if failed
+        list: List of prediction dictionaries
     """
-    if db_config is None:
+    if not db_config:
         db_config = {
             'host': 'localhost',
             'user': 'suba',
@@ -280,10 +279,118 @@ def save_prediction(prediction, db_config=None):
             'database': 'embryo_predictions'
         }
     
-    db = DatabaseConnection(**db_config)
-    if db.connect():
-        prediction_id = db.save_prediction_to_db(prediction)
+    try:
+        # Connect to the database
+        db = DatabaseConnection(**db_config)
+        if not db.connect():
+            raise ValueError("Could not connect to database")
+        
+        cursor = db.connection.cursor(dictionary=True)
+        
+        # First get the predictions
+        if patient_name:
+            # Get predictions for a specific patient
+            query = """
+            SELECT id, image_path, patient_name, predicted_class_index, predicted_class, 
+                   confidence, timestamp
+            FROM predictions
+            WHERE patient_name = %s
+            ORDER BY timestamp DESC
+            """
+            cursor.execute(query, (patient_name,))
+        else:
+            # Get all predictions
+            query = """
+            SELECT id, image_path, patient_name, predicted_class_index, predicted_class, 
+                   confidence, timestamp
+            FROM predictions
+            ORDER BY timestamp DESC
+            """
+            cursor.execute(query)
+        
+        predictions = cursor.fetchall()
+        
+        # Process the results
+        results = []
+        for pred in predictions:
+            # Get class probabilities for this prediction
+            prob_query = """
+            SELECT class_name, probability
+            FROM class_probabilities
+            WHERE prediction_id = %s
+            ORDER BY probability DESC
+            """
+            cursor.execute(prob_query, (pred['id'],))
+            probabilities_data = cursor.fetchall()
+            
+            # Extract class names and probabilities
+            class_names = [p['class_name'] for p in probabilities_data]
+            probabilities = [p['probability'] for p in probabilities_data]
+            
+            # Create a prediction dictionary
+            result = {
+                'id': pred['id'],
+                'image_path': pred['image_path'],
+                'patient_name': pred['patient_name'],
+                'predicted_class_index': pred['predicted_class_index'],
+                'predicted_class': pred['predicted_class'],
+                'confidence': pred['confidence'],
+                'timestamp': pred['timestamp'],
+                'class_names': class_names,
+                'probabilities': probabilities
+            }
+            
+            results.append(result)
+        
+        cursor.close()
         db.close()
-        return prediction_id
+        return results
+    except Error as e:
+        print(f"Error retrieving predictions: {e}")
+        raise e
+
+
+def get_unique_patients(db_config=None):
+    """Get a list of unique patient names from the database.
     
-    return None 
+    Args:
+        db_config (dict): Database configuration.
+        
+    Returns:
+        list: List of unique patient names
+    """
+    if not db_config:
+        db_config = {
+            'host': 'localhost',
+            'user': 'suba',
+            'password': 'Suba@123',
+            'database': 'embryo_predictions'
+        }
+    
+    try:
+        # Connect to the database
+        db = DatabaseConnection(**db_config)
+        if not db.connect():
+            raise ValueError("Could not connect to database")
+        
+        cursor = db.connection.cursor(dictionary=True)
+        
+        # Get unique patient names
+        query = """
+        SELECT DISTINCT patient_name 
+        FROM predictions 
+        WHERE patient_name IS NOT NULL 
+        ORDER BY patient_name
+        """
+        cursor.execute(query)
+        
+        patients = cursor.fetchall()
+        
+        cursor.close()
+        db.close()
+        
+        # Extract patient names from result
+        return [p['patient_name'] for p in patients]
+    except Error as e:
+        print(f"Error retrieving unique patients: {e}")
+        raise e

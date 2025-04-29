@@ -34,9 +34,9 @@ def main():
         
         try:
             subprocess.run(eval_cmd, check=True)
-            print("\n✅ Model evaluation completed successfully!")
+            print("\n[SUCCESS] Model evaluation completed successfully!")
         except subprocess.CalledProcessError as e:
-            print(f"\n❌ Error during model evaluation: {e}")
+            print(f"\n[ERROR] Error during model evaluation: {e}")
             if not args.dashboard_only:
                 sys.exit(1)
     
@@ -46,19 +46,19 @@ def main():
         print("STEP 2: Launching visualization dashboard")
         print("=" * 80)
         
-        dashboard_url = f"http://localhost:{args.port}"
-        print(f"\n🌐 Dashboard will be available at: {dashboard_url}")
-        print("📊 Opening web browser automatically...")
+        dashboard_url = f"http://localhost:5002"
+        print(f"\n[INFO] Reports dashboard will be available at: {dashboard_url}")
+        print("[INFO] Opening web browser automatically...")
         
         # Start the Flask app in a new process
         flask_cmd = [
             sys.executable, 
-            os.path.join(PROJECT_ROOT, "app", "app.py")
+            os.path.join(PROJECT_ROOT, "app", "simple_reports.py")
         ]
         
         # Set environment variables for Flask
         env = os.environ.copy()
-        env["FLASK_APP"] = os.path.join(PROJECT_ROOT, "app", "app.py")
+        env["FLASK_APP"] = os.path.join(PROJECT_ROOT, "app", "simple_reports.py")
         env["FLASK_ENV"] = "development"
         
         # Open browser after a short delay
@@ -73,13 +73,14 @@ def main():
         browser_thread.daemon = True
         browser_thread.start()
         
-        # Run Flask app
+        # Launch the Flask app
         try:
-            subprocess.run(flask_cmd, env=env, check=True)
-        except KeyboardInterrupt:
-            print("\n👋 Dashboard server stopped")
-        except subprocess.CalledProcessError as e:
-            print(f"\n❌ Error launching dashboard: {e}")
+            process = subprocess.Popen(flask_cmd, env=env)
+            print("\n[SUCCESS] Reports server started successfully!")
+            print("\n[NOTE] This is a separate server for viewing prediction reports.")
+            print("[NOTE] The reports feature allows you to view all predictions by patient name and date.")
+        except Exception as e:
+            print(f"\n[ERROR] Error launching reports server: {e}")
             sys.exit(1)
 
 if __name__ == "__main__":
