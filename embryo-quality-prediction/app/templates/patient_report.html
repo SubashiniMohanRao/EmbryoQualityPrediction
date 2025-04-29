@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Prediction Report - Embryo Quality Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            background-color: #4a6fa5;
+            color: white;
+            font-weight: bold;
+            border-radius: 10px 10px 0 0 !important;
+        }
+        .btn-primary {
+            background-color: #4a6fa5;
+            border-color: #4a6fa5;
+        }
+        .btn-primary:hover {
+            background-color: #3a5a8f;
+            border-color: #3a5a8f;
+        }
+        .patient-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .prediction-label {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .confidence-badge {
+            font-size: 1.1rem;
+        }
+        .probability-bar {
+            height: 24px;
+        }
+        .print-header {
+            display: none;
+        }
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-header {
+                display: block;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .container-fluid {
+                width: 100%;
+                max-width: 100%;
+            }
+        }
+        /* Loading Spinner */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+            color: white;
+        }
+        .spinner {
+            width: 4rem;
+            height: 4rem;
+            margin-bottom: 1rem;
+        }
+        .loading-text {
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Spinner Overlay -->
+    <div class="spinner-overlay" id="spinnerOverlay">
+        <div class="spinner-border spinner text-light" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="loading-text" id="loadingText">Processing...</div>
+    </div>
+    
+    <!-- Print Header (only visible when printing) -->
+    <div class="print-header">
+        <h1>Embryo Quality Prediction - Patient Report</h1>
+        <p>Generated on: {{ prediction.timestamp }}</p>
+    </div>
+    
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="row mb-4 no-print">
+            <div class="col">
+                <h1 class="display-4">Patient Prediction Report</h1>
+                <h2 class="text-muted">Embryo Quality Analysis</h2>
+            </div>
+            <div class="col-auto mt-3">
+                {% if session.get('email') %}
+                <div class="d-flex align-items-center">
+                    <span class="me-3">
+                        <i class="bi bi-person-circle"></i> {{ session.get('email') }}
+                    </span>
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
+                        <i class="bi bi-box-arrow-right"></i> Sign Out
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show no-print" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Action Buttons -->
+        <div class="row mb-4 no-print">
+            <div class="col">
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary me-2">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+                <button onclick="window.print()" class="btn btn-outline-primary me-2">
+                    <i class="bi bi-printer"></i> Print Report
+                </button>
+                <button onclick="downloadPDF()" class="btn btn-outline-success">
+                    <i class="bi bi-file-earmark-pdf"></i> Download PDF
+                </button>
+            </div>
+        </div>
+        
+        <!-- Patient Information -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-person-badge"></i> Patient Information
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <th style="width: 30%;">Patient Name:</th>
+                                        <td>{{ prediction.patient_name }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Prediction ID:</th>
+                                        <td>{{ prediction.id }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Analysis Date:</th>
+                                        <td>{{ prediction.timestamp }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Prediction Result -->
+        <div class="row mb-4">
+            <div class="col-md-5">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-image"></i> Embryo Image
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="{{ url_for('uploaded_file', filename=prediction.filename) }}" class="patient-image" alt="Patient Embryo Image">
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-graph-up"></i> Prediction Result
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="prediction-label">
+                                    Predicted Class: 
+                                    <span class="text-primary">{{ prediction.predicted_class }}</span>
+                                </div>
+                                <div class="confidence-badge">
+                                    Confidence: 
+                                    <span class="badge {% if prediction.confidence > 0.8 %}bg-success{% elif prediction.confidence > 0.6 %}bg-warning{% else %}bg-danger{% endif %}">
+                                        {{ "%.2f"|format(prediction.confidence * 100) }}%
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <h5 class="mt-4 mb-3">Class Probabilities</h5>
+                        {% for prob in probabilities %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span>{{ prob.class_name }}</span>
+                                <span class="badge bg-primary rounded-pill">{{ "%.2f"|format(prob.probability * 100) }}%</span>
+                            </div>
+                            <div class="progress probability-bar">
+                                <div class="progress-bar {% if prob.class_name == prediction.predicted_class %}bg-success{% endif %}" 
+                                     role="progressbar" 
+                                     style="width: {{ prob.probability * 100 }}%;" 
+                                     aria-valuenow="{{ prob.probability * 100 }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    {{ "%.2f"|format(prob.probability * 100) }}%
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Prediction Analysis and Notes -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-file-text"></i> Analysis and Notes
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12">
+                                {% if prediction.predicted_class == 'Good' %}
+                                <p>This embryo is classified as <strong>Good</strong> quality, indicating high potential for successful implantation. The analysis indicates favorable morphological characteristics and developmental patterns that are associated with viable embryos.</p>
+                                {% elif prediction.predicted_class == 'Fair' %}
+                                <p>This embryo is classified as <strong>Fair</strong> quality. While it shows some positive developmental characteristics, there may be minor morphological concerns. Fair quality embryos still maintain reasonable potential for successful implantation.</p>
+                                {% elif prediction.predicted_class == 'Poor' %}
+                                <p>This embryo is classified as <strong>Poor</strong> quality. The analysis detected potential issues with morphology or development that may reduce the likelihood of successful implantation. Additional clinical consideration is recommended.</p>
+                                {% else %}
+                                <p>The analysis of this embryo indicates classification as <strong>{{ prediction.predicted_class }}</strong>. This assessment is based on various morphological features and developmental patterns recognized by our AI model.</p>
+                                {% endif %}
+                                
+                                <p>
+                                    <strong>Confidence Analysis:</strong>
+                                    {% if prediction.confidence > 0.9 %}
+                                    The model has very high confidence in this classification ({{ "%.2f"|format(prediction.confidence * 100) }}%), suggesting strong evidence supporting this assessment.
+                                    {% elif prediction.confidence > 0.7 %}
+                                    The model has good confidence in this classification ({{ "%.2f"|format(prediction.confidence * 100) }}%), indicating reliable evidence supporting this assessment.
+                                    {% else %}
+                                    The model has moderate confidence in this classification ({{ "%.2f"|format(prediction.confidence * 100) }}%), suggesting some level of uncertainty. Clinical correlation is strongly advised.
+                                    {% endif %}
+                                </p>
+                                
+                                <div class="mt-4">
+                                    <h5>Clinical Considerations</h5>
+                                    <ul>
+                                        <li>This AI-based assessment is intended to assist clinical decision-making, not replace it.</li>
+                                        <li>Final embryo selection should incorporate additional clinical parameters not captured in the image analysis.</li>
+                                        <li>Consider patient-specific factors when interpreting these results.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="row mt-5 mb-4">
+            <div class="col-12 text-center text-muted">
+                <small>© Embryo Quality Prediction System | Report generated on {{ prediction.timestamp }}</small>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <script>
+        // Function to show the spinner overlay
+        function showSpinner(message) {
+            document.getElementById('loadingText').innerText = message || 'Processing...';
+            document.getElementById('spinnerOverlay').style.display = 'flex';
+        }
+        
+        // Function to hide the spinner overlay
+        function hideSpinner() {
+            document.getElementById('spinnerOverlay').style.display = 'none';
+        }
+        
+        // Function to download the report as PDF
+        function downloadPDF() {
+            showSpinner('Generating PDF...');
+            
+            const element = document.body;
+            const options = {
+                margin: [10, 10, 10, 10],
+                filename: 'Patient_Report_{{ prediction.id }}.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            
+            // Add print header visibility before generating PDF
+            document.querySelector('.print-header').style.display = 'block';
+            
+            html2pdf().from(element).set(options).save().then(() => {
+                document.querySelector('.print-header').style.display = 'none';
+                hideSpinner();
+            });
+        }
+    </script>
+</body>
+</html> 

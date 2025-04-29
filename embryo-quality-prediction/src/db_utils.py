@@ -62,7 +62,7 @@ class DatabaseConnection:
             CREATE TABLE IF NOT EXISTS predictions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 image_path VARCHAR(255) NOT NULL,
-                patient_name VARCHAR(100) NULL,
+                patient_name VARCHAR(100) DEFAULT NULL,
                 predicted_class_index INT NOT NULL,
                 predicted_class VARCHAR(100) NOT NULL,
                 confidence FLOAT NOT NULL,
@@ -120,6 +120,9 @@ class DatabaseConnection:
                 DECLARE v_probability FLOAT;
                 DECLARE v_max_index INT;
                 
+                -- Debug output to see received values
+                SELECT 'Received patient_name:', p_patient_name;
+                
                 -- Start transaction
                 START TRANSACTION;
                 
@@ -133,7 +136,7 @@ class DatabaseConnection:
                     timestamp
                 ) VALUES (
                     p_image_path,
-                    p_patient_name,
+                    p_patient_name,  -- This will use NULL if p_patient_name is NULL
                     p_predicted_class_index,
                     p_predicted_class,
                     p_confidence,
@@ -199,14 +202,26 @@ class DatabaseConnection:
             else:
                 timestamp = datetime.now()
                 
-            # Call the stored procedure
-            patient_name = prediction.get('patient_name', None)
+            # Handle patient_name: ensure it's None if empty string
+            patient_name = prediction.get('patient_name')
+            print(f"Initial patient_name in save_prediction_to_db: {patient_name!r} (type: {type(patient_name).__name__ if patient_name is not None else 'None'})")
+            
+            if patient_name == '':
+                print("Empty string patient_name detected, setting to None")
+                patient_name = None
+            elif patient_name is not None and patient_name.strip() == '':
+                print("Whitespace-only patient_name detected, setting to None")
+                patient_name = None
+            
+            print(f"Final patient_name in save_prediction_to_db: {patient_name!r}")
+            
             print(f"\n==== DATABASE SAVE OPERATION ====")
-            print(f"Patient name from prediction: {patient_name} (type: {type(patient_name)})")
-            print(f"Image path: {prediction['image_path']}")
-            print(f"Class index: {prediction['predicted_class_index']} (type: {type(prediction['predicted_class_index'])})")
-            print(f"Class name: {prediction['predicted_class']}")
-            print(f"Timestamp: {timestamp}")
+            print(f"Patient name from prediction: {patient_name} (type: {type(patient_name).__name__})")
+            print(f"Image path: {prediction['image_path']} (type: {type(prediction['image_path']).__name__})")
+            print(f"Class index: {prediction['predicted_class_index']} (type: {type(prediction['predicted_class_index']).__name__})")
+            print(f"Class name: {prediction['predicted_class']} (type: {type(prediction['predicted_class']).__name__})")
+            print(f"Confidence: {prediction['confidence']} (type: {type(prediction['confidence']).__name__})")
+            print(f"Timestamp: {timestamp} (type: {type(timestamp).__name__})")
             
             args = [
                 prediction['image_path'],
@@ -220,15 +235,14 @@ class DatabaseConnection:
             ]
             
             print(f"Arguments prepared for database procedure:")
-            print(f"1. Image path: {args[0]}")
-            print(f"2. Patient name: {args[1]}")
-            print(f"3. Class index: {args[2]}")
-            print(f"4. Class name: {args[3]}")
-            print(f"5. Confidence: {args[4]}")
-            print(f"6. Timestamp: {args[5]}")
+            print(f"1. Image path: {args[0]!r}")
+            print(f"2. Patient name: {args[1]!r} (type: {type(args[1]).__name__ if args[1] is not None else 'None'})")
+            print(f"3. Class index: {args[2]!r}")
+            print(f"4. Class name: {args[3]!r}")
+            print(f"5. Confidence: {args[4]!r}")
+            print(f"6. Timestamp: {args[5]!r}")
             print(f"7. Class names: (JSON)")
             print(f"8. Probabilities: (JSON)")
-            print(f"==== END DATABASE SAVE OPERATION ====")
             
             try:
                 cursor.callproc('SavePrediction', args)
@@ -238,14 +252,17 @@ class DatabaseConnection:
                     result_row = result.fetchone()
                     if result_row and 'prediction_id' in result_row:
                         print(f"Successfully saved prediction with ID: {result_row['prediction_id']}")
+                        print(f"==== END DATABASE SAVE OPERATION ====")
                         return result_row['prediction_id']
             except Error as e:
                 print(f"Error calling SavePrediction procedure: {e}")
                 # Print the arguments for debugging
                 print(f"Arguments passed to procedure: {args}")
+                print(f"==== END DATABASE SAVE OPERATION ====")
                 raise e
             
             self.connection.commit()
+            print(f"==== END DATABASE SAVE OPERATION ====")
             return None
             
         except Error as e:
@@ -272,6 +289,22 @@ def save_prediction(prediction, db_config=None):
     Returns:
         int: ID of the saved prediction or None if failed
     """
+    # Debug info about the prediction being passed
+    patient_name = prediction.get('patient_name')
+    print(f"\n=== SAVE_PREDICTION DEBUG ===")
+    print(f"Initial patient_name: {patient_name!r} (type: {type(patient_name).__name__})")
+    
+    # Make sure patient_name is None if it's an empty string
+    if patient_name == '':
+        print("Empty string patient_name detected, setting to None")
+        prediction['patient_name'] = None
+    elif patient_name is not None and patient_name.strip() == '':
+        print("Whitespace-only patient_name detected, setting to None")
+        prediction['patient_name'] = None
+    
+    print(f"Final patient_name: {prediction.get('patient_name')!r}")
+    print(f"=== END SAVE_PREDICTION DEBUG ===\n")
+    
     if db_config is None:
         db_config = {
             'host': 'localhost',

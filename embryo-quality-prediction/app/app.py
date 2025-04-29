@@ -12,6 +12,9 @@ from datetime import datetime
 import markdown
 import bleach
 import functools
+import pymysql
+import mysql.connector
+from mysql.connector import Error
 
 # Get the absolute path to the project root directory
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -68,6 +71,29 @@ class AppConfig:
         return '.' in filename and \
                filename.rsplit('.', 1)[1].lower() in cls.ALLOWED_EXTENSIONS
 
+# Database connection configuration
+DB_CONFIG = {
+    'host': 'localhost',
+    'user': 'suba',
+    'password': 'Suba@123',  # Use the same password as in AuthManager
+    'database': 'embryo_predictions',  # Use the same database name as in AuthManager
+    'cursorclass': pymysql.cursors.DictCursor
+}
+
+# Function to get database connection using mysql.connector (same as AuthManager)
+def get_db_connection():
+    try:
+        connection = mysql.connector.connect(
+            host='localhost',
+            user='suba',
+            password='Suba@123',
+            database='embryo_predictions'
+        )
+        if connection.is_connected():
+            return connection
+    except Error as e:
+        print(f"Error connecting to MySQL: {e}")
+        return None
 
 @app.route('/')
 @login_required
@@ -198,26 +224,87 @@ def dashboard():
     class_f1_keys = []
     class_f1_data = []
     
-    if model_data:
-        # Extract class names from the first model's data
+    # If we didn't find class-specific F1 scores, try the format from model_evaluations.csv
+    if not class_names:
         for key in model_data[0].keys():
-            if key.endswith('_f1') and not key == 'f1_score':
-                class_name = key.replace('_f1', '')
+            if key.startswith('f1_') and not key == 'f1_score':
+                class_name = key.replace('f1_', '')
                 class_names.append(class_name)
                 class_f1_keys.append(key)
+    
+    # Prepare class-wise F1 data for charts
+    for i, class_key in enumerate(class_f1_keys):
+        class_f1_values = [float(m[class_key]) for m in model_data]
+        class_f1_data.append(class_f1_values)
         
-        # If we didn't find class-specific F1 scores, try the format from model_evaluations.csv
-        if not class_names:
-            for key in model_data[0].keys():
-                if key.startswith('f1_') and not key == 'f1_score':
-                    class_name = key.replace('f1_', '')
-                    class_names.append(class_name)
-                    class_f1_keys.append(key)
+    # Get patient predictions from database
+    patient_predictions = []
+    try:
+        # Connect to the database using mysql.connector (same as AuthManager)
+        connection = get_db_connection()
         
-        # Prepare class-wise F1 data for charts
-        for i, class_key in enumerate(class_f1_keys):
-            class_f1_values = [float(m[class_key]) for m in model_data]
-            class_f1_data.append(class_f1_values)
+        if connection:
+            cursor = connection.cursor(dictionary=True)
+            
+            # Get the most recent 20 predictions with more detailed error reporting
+            query = """
+                SELECT 
+                    id, image_path, patient_name, predicted_class, confidence, 
+                    timestamp, created_at
+                FROM 
+                    predictions 
+                ORDER BY 
+                    timestamp DESC 
+                LIMIT 20
+            """
+            print(f"Executing query: {query}")
+            cursor.execute(query)
+            patient_predictions = cursor.fetchall()
+            
+            # Add filename to each prediction for easier template rendering
+            for pred in patient_predictions:
+                if pred.get('image_path'):
+                    # Extract just the filename from the full path 
+                    pred['filename'] = os.path.basename(pred['image_path'])
+                else:
+                    pred['filename'] = ''
+            
+            # Check if we got any results
+            print(f"Retrieved {len(patient_predictions)} prediction records")
+            if patient_predictions:
+                print(f"Sample record: {str(patient_predictions[0])}")
+            else:
+                # Try a different simpler query if no results
+                cursor.execute("SELECT COUNT(*) as count FROM predictions")
+                count_result = cursor.fetchone()
+                print(f"Total prediction records in database: {count_result['count'] if count_result else 'unknown'}")
+                
+                # Try to get all columns to see structure
+                cursor.execute("SHOW COLUMNS FROM predictions")
+                columns = cursor.fetchall()
+                print(f"Table columns: {[col['Field'] for col in columns]}")
+                
+                # Try a more basic query
+                cursor.execute("SELECT * FROM predictions LIMIT 5")
+                basic_results = cursor.fetchall()
+                print(f"Basic query returned {len(basic_results)} records")
+                if basic_results:
+                    print(f"Sample basic record: {str(basic_results[0])}")
+            
+            cursor.close()
+            connection.close()
+        else:
+            print("Failed to establish database connection")
+            flash("Failed to connect to the database", "danger")
+    except Exception as e:
+        print(f"Error loading patient predictions: {str(e)}")
+        flash(f"Error loading patient predictions: {str(e)}", "warning")
+        # Don't abort, continue with empty predictions
+    
+    # If we don't have any predictions from the database, initialize with empty list
+    if not patient_predictions:
+        patient_predictions = []
+        print("No patient predictions were loaded, using empty list")
     
     return render_template('dashboard.html',
                           models=models,
@@ -229,7 +316,8 @@ def dashboard():
                           f1_data=f1_data,
                           class_names=class_names,
                           class_f1_keys=class_f1_keys,
-                          class_f1_data=class_f1_data)
+                          class_f1_data=class_f1_data,
+                          patient_predictions=patient_predictions)
 
 
 @app.route('/evaluate', methods=['POST'])
@@ -449,7 +537,18 @@ def validate_image():
             model_path = models[0]['path']
             
         # Get patient name if provided
-        patient_name = request.form.get('patient_name')
+        patient_name = request.form.get('patient_name', '').strip()
+        print(f"Original patient name from form: '{patient_name}' (length: {len(patient_name)})")
+        
+        # Only set patient_name to None if it's actually empty
+        if not patient_name:
+            print("Patient name is empty, setting to None")
+            patient_name = None
+        else:
+            print(f"Using patient name: '{patient_name}'")
+        
+        # Log the patient name for debugging
+        print(f"Form submitted with patient name: '{patient_name}' (type: {type(patient_name).__name__ if patient_name is not None else 'None'})")
         
         # Check if the post request has the file part
         if 'file' not in request.files:
@@ -556,11 +655,17 @@ def validate_image():
     return render_template('validate.html', models=models)
 
 
-@app.route('/uploads/<filename>')
+@app.route('/uploads/<path:filename>')
 @login_required
 def uploaded_file(filename):
     """Serve uploaded files."""
-    return send_from_directory(AppConfig.UPLOAD_DIR, filename)
+    try:
+        # Extract just the base filename in case the full path was passed
+        base_filename = os.path.basename(filename)
+        return send_from_directory(AppConfig.UPLOAD_DIR, base_filename)
+    except Exception as e:
+        print(f"Error serving uploaded file '{filename}': {str(e)}")
+        return f"Error: File not found or could not be served", 404
 
 
 @app.route('/results/<path:filepath>')
@@ -1048,5 +1153,406 @@ def logout():
     flash('You have been logged out', 'info')
     return redirect(url_for('login'))
 
+@app.route('/patient_report/<int:prediction_id>')
+@login_required
+def patient_report(prediction_id):
+    """View detailed patient prediction report."""
+    try:
+        print(f"Retrieving patient report for prediction_id: {prediction_id}")
+        
+        # Connect to the database
+        connection = get_db_connection()
+        
+        if not connection:
+            print("Failed to establish database connection")
+            flash("Failed to connect to the database", "danger")
+            return redirect(url_for('dashboard'))
+        
+        cursor = connection.cursor(dictionary=True)
+        prediction = None
+        probabilities = []
+        
+        try:
+            # First get the prediction details directly with a simple query
+            query = """
+                SELECT 
+                    id, image_path, patient_name, predicted_class_index, 
+                    predicted_class, confidence, timestamp, created_at
+                FROM 
+                    predictions 
+                WHERE 
+                    id = %s
+            """
+            cursor.execute(query, (prediction_id,))
+            prediction = cursor.fetchone()
+            print(f"Prediction details: {str(prediction) if prediction else 'None'}")
+            
+            if prediction:
+                # If we have prediction details, get the class probabilities
+                prob_query = """
+                    SELECT 
+                        class_name, probability
+                    FROM 
+                        class_probabilities
+                    WHERE 
+                        prediction_id = %s
+                    ORDER BY 
+                        probability DESC
+                """
+                cursor.execute(prob_query, (prediction_id,))
+                probabilities = cursor.fetchall()
+                print(f"Retrieved {len(probabilities)} probability records")
+        finally:
+            cursor.close()
+            connection.close()
+        
+        if not prediction:
+            print(f"No prediction found for id: {prediction_id}")
+            flash('Prediction not found', 'danger')
+            return redirect(url_for('dashboard'))
+        
+        # Ensure image_path contains the full filename
+        if prediction.get('image_path'):
+            prediction['filename'] = os.path.basename(prediction['image_path'])
+        else:
+            prediction['filename'] = ''
+        
+        return render_template('patient_report.html', 
+                              prediction=prediction, 
+                              probabilities=probabilities)
+    
+    except Exception as e:
+        print(f"Error in patient_report: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Error retrieving prediction data: {str(e)}', 'danger')
+        return redirect(url_for('dashboard'))
+
+@app.route('/test_db')
+@login_required
+def test_db():
+    """Test database connection and show patient predictions."""
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        
+        if not connection:
+            return "<h1>Database Error</h1><p>Failed to connect to the database</p>"
+        
+        cursor = connection.cursor(dictionary=True)
+        try:
+            # Get all predictions
+            cursor.execute("""
+                SELECT * FROM predictions
+                ORDER BY timestamp DESC
+            """)
+            predictions = cursor.fetchall()
+            
+            # Get all class probabilities
+            cursor.execute("""
+                SELECT * FROM class_probabilities
+                LIMIT 10
+            """)
+            probabilities = cursor.fetchall()
+        finally:
+            cursor.close()
+            connection.close()
+        
+        # Return a simple HTML display of the data
+        html = "<h1>Database Test - Predictions</h1>"
+        html += f"<p>Found {len(predictions)} predictions</p>"
+        html += "<table border='1'><tr><th>ID</th><th>Image</th><th>Patient</th><th>Class</th><th>Confidence</th><th>Timestamp</th></tr>"
+        
+        for p in predictions:
+            html += f"<tr><td>{p['id']}</td><td>{p.get('image_path', 'N/A')}</td><td>{p.get('patient_name', 'N/A')}</td>"
+            html += f"<td>{p.get('predicted_class', 'N/A')}</td><td>{p.get('confidence', 'N/A')}</td><td>{p.get('timestamp', 'N/A')}</td></tr>"
+        
+        html += "</table>"
+        
+        html += "<h2>Class Probabilities Sample</h2>"
+        html += f"<p>Found {len(probabilities)} probability records</p>"
+        html += "<table border='1'><tr><th>ID</th><th>Prediction ID</th><th>Class</th><th>Probability</th></tr>"
+        
+        for p in probabilities:
+            html += f"<tr><td>{p['id']}</td><td>{p['prediction_id']}</td><td>{p['class_name']}</td><td>{p['probability']}</td></tr>"
+        
+        html += "</table>"
+        
+        return html
+    
+    except Exception as e:
+        return f"<h1>Database Error</h1><p>Error: {str(e)}</p>"
+
+@app.route('/db_viewer')
+@login_required
+def db_viewer():
+    """Database viewer to examine tables and their contents."""
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        
+        if not connection:
+            return "<h1>Database Error</h1><p>Failed to connect to the database</p>"
+        
+        cursor = connection.cursor(dictionary=True)
+        try:
+            # Get list of tables
+            cursor.execute("SHOW TABLES")
+            tables = [table[f"Tables_in_{connection.database}"] for table in cursor.fetchall()]
+            
+            # Get data for each table
+            tables_data = {}
+            table_columns = {}
+            
+            for table in tables:
+                # Get column information
+                cursor.execute(f"SHOW COLUMNS FROM {table}")
+                columns = [col['Field'] for col in cursor.fetchall()]
+                table_columns[table] = columns
+                
+                # Get row count
+                cursor.execute(f"SELECT COUNT(*) as count FROM {table}")
+                count = cursor.fetchone()['count']
+                
+                # Get sample data (up to 10 rows)
+                cursor.execute(f"SELECT * FROM {table} LIMIT 10")
+                sample_data = cursor.fetchall()
+                
+                tables_data[table] = {
+                    'count': count,
+                    'sample_data': sample_data
+                }
+        finally:
+            cursor.close()
+            connection.close()
+        
+        # Return a simple HTML display of the data
+        html = "<h1>Database Viewer - embryo_predictions</h1>"
+        
+        for table in tables:
+            html += f"<h2>Table: {table} ({tables_data[table]['count']} rows)</h2>"
+            
+            if tables_data[table]['count'] > 0:
+                html += "<table border='1'><tr>"
+                
+                # Table headers
+                for col in table_columns[table]:
+                    html += f"<th>{col}</th>"
+                html += "</tr>"
+                
+                # Table data
+                for row in tables_data[table]['sample_data']:
+                    html += "<tr>"
+                    for col in table_columns[table]:
+                        html += f"<td>{row.get(col, '')}</td>"
+                    html += "</tr>"
+                
+                html += "</table>"
+            else:
+                html += "<p>No data in this table</p>"
+        
+        return html
+    
+    except Exception as e:
+        return f"<h1>Database Error</h1><p>Error: {str(e)}</p>"
+
+@app.route('/check_predictions')
+@login_required
+def check_predictions():
+    """Check and display patient predictions in a simple format."""
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        
+        if not connection:
+            return "<h1>Database Error</h1><p>Failed to connect to the database</p>"
+        
+        cursor = connection.cursor(dictionary=True)
+        try:
+            # Try multiple ways to get predictions
+            
+            # Method 1: Standard query
+            cursor.execute("""
+                SELECT id, image_path, patient_name, predicted_class, confidence, timestamp
+                FROM predictions 
+                ORDER BY timestamp DESC
+            """)
+            standard_predictions = cursor.fetchall()
+            
+            # Method 2: Using GetPredictionsByPatient stored procedure
+            # Try with a sample patient name
+            cursor.execute("SELECT DISTINCT patient_name FROM predictions LIMIT 1")
+            sample_result = cursor.fetchone()
+            sample_patient = sample_result['patient_name'] if sample_result else None
+            
+            patient_predictions = []
+            if sample_patient:
+                cursor.callproc('GetPredictionsByPatient', [sample_patient])
+                patient_predictions = cursor.fetchall()
+        finally:
+            cursor.close()
+            connection.close()
+        
+        # Create HTML response
+        html = "<h1>Patient Predictions Check</h1>"
+        
+        html += f"<h2>Standard Query Results ({len(standard_predictions)} records)</h2>"
+        if standard_predictions:
+            html += "<table border='1'><tr><th>ID</th><th>Image</th><th>Patient</th><th>Class</th><th>Confidence</th><th>Timestamp</th></tr>"
+            for p in standard_predictions:
+                html += f"<tr><td>{p['id']}</td><td>{p.get('image_path', 'N/A')}</td><td>{p.get('patient_name', 'N/A')}</td>"
+                html += f"<td>{p.get('predicted_class', 'N/A')}</td><td>{p.get('confidence', 'N/A')}</td><td>{p.get('timestamp', 'N/A')}</td></tr>"
+            html += "</table>"
+        else:
+            html += "<p>No records found with standard query</p>"
+        
+        if sample_patient:
+            html += f"<h2>GetPredictionsByPatient Results for '{sample_patient}' ({len(patient_predictions)} records)</h2>"
+            if patient_predictions:
+                html += "<table border='1'><tr><th>ID</th><th>Image</th><th>Patient</th><th>Class</th><th>Confidence</th><th>Timestamp</th></tr>"
+                for p in patient_predictions:
+                    html += f"<tr><td>{p['id']}</td><td>{p.get('image_path', 'N/A')}</td><td>{p.get('patient_name', 'N/A')}</td>"
+                    html += f"<td>{p.get('predicted_class', 'N/A')}</td><td>{p.get('confidence', 'N/A')}</td><td>{p.get('timestamp', 'N/A')}</td></tr>"
+                html += "</table>"
+            else:
+                html += "<p>No records found for this patient</p>"
+        
+        html += "<h2>Debug Information</h2>"
+        html += "<p>Check the following:</p>"
+        html += "<ul>"
+        html += "<li>Are there patient_name values in your records?</li>"
+        html += "<li>Do all required columns exist? (id, image_path, patient_name, predicted_class, confidence, timestamp)</li>"
+        html += "<li>Check the dashboard for any JavaScript errors (check browser console)</li>"
+        html += "</ul>"
+        
+        html += "<p><a href='/dashboard'>Go to Dashboard</a> | <a href='/db_viewer'>View All Tables</a></p>"
+        
+        return html
+        
+    except Exception as e:
+        return f"<h1>Error Checking Predictions</h1><p>Error: {str(e)}</p>"
+
+@app.route('/check_uploads')
+@login_required
+def check_uploads():
+    """Check upload directory and files."""
+    try:
+        # Get upload directory info
+        upload_dir = AppConfig.UPLOAD_DIR
+        
+        # Ensure the directory exists
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Check if the directory exists
+        dir_exists = os.path.isdir(upload_dir)
+        
+        # List files in the directory
+        if dir_exists:
+            files = os.listdir(upload_dir)
+            file_info = []
+            
+            for filename in files:
+                file_path = os.path.join(upload_dir, filename)
+                if os.path.isfile(file_path):
+                    file_size = os.path.getsize(file_path)
+                    file_date = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')
+                    # Check if it's an image
+                    is_image = any(filename.lower().endswith(ext) for ext in AppConfig.ALLOWED_EXTENSIONS)
+                    
+                    file_info.append({
+                        'name': filename,
+                        'path': file_path,
+                        'size': file_size,
+                        'date': file_date,
+                        'is_image': is_image
+                    })
+            
+            # Sort by date (newest first)
+            file_info.sort(key=lambda x: x['date'], reverse=True)
+            
+            # Create HTML response
+            html = f"<h1>Upload Directory Check</h1>"
+            html += f"<p>Directory path: {upload_dir}</p>"
+            html += f"<p>Directory exists: {dir_exists}</p>"
+            html += f"<p>File count: {len(files)}</p>"
+            
+            # Display files
+            html += f"<h2>Files in Upload Directory</h2>"
+            if file_info:
+                html += "<table border='1'><tr><th>Name</th><th>Size</th><th>Modified</th><th>Image</th><th>Preview</th></tr>"
+                for file in file_info:
+                    html += f"<tr><td>{file['name']}</td><td>{file['size']} bytes</td><td>{file['date']}</td>"
+                    html += f"<td>{'Yes' if file['is_image'] else 'No'}</td>"
+                    if file['is_image']:
+                        html += f"<td><img src='/uploads/{file['name']}' style='max-width: 100px; max-height: 100px;'></td>"
+                    else:
+                        html += f"<td>N/A</td>"
+                    html += "</tr>"
+                html += "</table>"
+            else:
+                html += "<p>No files found in upload directory</p>"
+                
+            # Test image path construction
+            html += f"<h2>Image Path Test</h2>"
+            if file_info and any(file['is_image'] for file in file_info):
+                test_file = next((file for file in file_info if file['is_image']), None)
+                if test_file:
+                    full_path = test_file['path']
+                    filename = test_file['name']
+                    url = url_for('uploaded_file', filename=filename)
+                    
+                    html += f"<p>Test file: {filename}</p>"
+                    html += f"<p>Full path: {full_path}</p>"
+                    html += f"<p>URL: {url}</p>"
+                    html += f"<p>Preview: <img src='{url}' style='max-width: 200px; max-height: 200px;'></p>"
+            
+            # Path format test for sample database record
+            html += f"<h2>Database Image Path Format Test</h2>"
+            # Connect to the database
+            connection = get_db_connection()
+            if connection:
+                cursor = connection.cursor(dictionary=True)
+                try:
+                    # Get a sample record
+                    cursor.execute("SELECT id, image_path FROM predictions LIMIT 1")
+                    sample = cursor.fetchone()
+                    
+                    if sample:
+                        db_image_path = sample['image_path']
+                        db_image_filename = os.path.basename(db_image_path)
+                        html += f"<p>Database ID: {sample['id']}</p>"
+                        html += f"<p>Database image_path: {db_image_path}</p>"
+                        html += f"<p>Extracted filename: {db_image_filename}</p>"
+                        
+                        # Test if file exists in uploads
+                        test_path = os.path.join(upload_dir, db_image_filename)
+                        file_exists = os.path.isfile(test_path)
+                        html += f"<p>File exists in upload dir: {file_exists}</p>"
+                        
+                        if file_exists:
+                            url = url_for('uploaded_file', filename=db_image_filename)
+                            html += f"<p>URL: {url}</p>"
+                            html += f"<p>Preview: <img src='{url}' style='max-width: 200px; max-height: 200px;'></p>"
+                finally:
+                    cursor.close()
+                    connection.close()
+            
+            return html
+        else:
+            return f"<h1>Error</h1><p>Upload directory does not exist: {upload_dir}</p>"
+    
+    except Exception as e:
+        import traceback
+        error = traceback.format_exc()
+        return f"<h1>Error</h1><p>Error checking upload directory: {str(e)}</p><pre>{error}</pre>"
+
 if __name__ == '__main__':
+    # Ensure uploads directory exists
+    print(f"Ensuring uploads directory exists: {AppConfig.UPLOAD_DIR}")
+    os.makedirs(AppConfig.UPLOAD_DIR, exist_ok=True)
+    
+    # List any files in the uploads directory
+    upload_files = os.listdir(AppConfig.UPLOAD_DIR) if os.path.exists(AppConfig.UPLOAD_DIR) else []
+    print(f"Found {len(upload_files)} files in uploads directory")
+    
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -277,6 +277,83 @@
             {% endfor %}
         </div>
         
+        <!-- Patient Predictions Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-person-badge"></i> Patient Predictions
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="patientSearchInput" placeholder="Search by patient name...">
+                                    <button class="btn btn-outline-secondary" type="button" id="searchPatientBtn">
+                                        <i class="bi bi-search"></i> Search
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-8 text-end">
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-outline-primary" id="filterAllBtn">All</button>
+                                    <button type="button" class="btn btn-outline-success" id="filterGoodBtn">Good</button>
+                                    <button type="button" class="btn btn-outline-warning" id="filterFairBtn">Fair</button>
+                                    <button type="button" class="btn btn-outline-danger" id="filterPoorBtn">Poor</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover" id="patientPredictionsTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Image</th>
+                                        <th>Patient Name</th>
+                                        <th>Predicted Class</th>
+                                        <th>Confidence</th>
+                                        <th>Timestamp</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for prediction in patient_predictions %}
+                                    <tr>
+                                        <td>{{ prediction.id }}</td>
+                                        <td>
+                                            <img src="{{ url_for('uploaded_file', filename=prediction.filename) }}" 
+                                                 alt="Embryo" class="img-thumbnail" style="max-width: 60px;">
+                                        </td>
+                                        <td>{{ prediction.patient_name }}</td>
+                                        <td>
+                                            <span class="badge {% if prediction.predicted_class == 'Good' %}bg-success{% elif prediction.predicted_class == 'Fair' %}bg-warning{% elif prediction.predicted_class == 'Poor' %}bg-danger{% else %}bg-primary{% endif %}">
+                                                {{ prediction.predicted_class }}
+                                            </span>
+                                        </td>
+                                        <td>{{ "%.2f"|format(prediction.confidence * 100) }}%</td>
+                                        <td>{{ prediction.timestamp }}</td>
+                                        <td>
+                                            <a href="{{ url_for('patient_report', prediction_id=prediction.id) }}" class="btn btn-sm btn-primary">
+                                                <i class="bi bi-file-text"></i> View Report
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        {% if not patient_predictions %}
+                        <div class="alert alert-info mt-3">
+                            <i class="bi bi-info-circle"></i> No patient predictions available.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Class-wise Performance Comparison -->
         <div class="row mb-4">
             <div class="col-12">
@@ -484,6 +561,62 @@
                 }
             });
             {% endfor %}
+
+            // Patient search functionality
+            document.getElementById('searchPatientBtn').addEventListener('click', function() {
+                const searchValue = document.getElementById('patientSearchInput').value.toLowerCase();
+                const tableRows = document.querySelectorAll('#patientPredictionsTable tbody tr');
+                
+                tableRows.forEach(row => {
+                    const patientName = row.querySelector('td:nth-child(3)').textContent.toLowerCase();
+                    if (patientName.includes(searchValue)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            });
+            
+            // Reset search when input field is cleared
+            document.getElementById('patientSearchInput').addEventListener('input', function() {
+                if (this.value === '') {
+                    document.querySelectorAll('#patientPredictionsTable tbody tr').forEach(row => {
+                        row.style.display = '';
+                    });
+                }
+            });
+            
+            // Filter buttons
+            document.getElementById('filterAllBtn').addEventListener('click', function() {
+                document.querySelectorAll('#patientPredictionsTable tbody tr').forEach(row => {
+                    row.style.display = '';
+                });
+            });
+            
+            document.getElementById('filterGoodBtn').addEventListener('click', function() {
+                filterByClass('Good');
+            });
+            
+            document.getElementById('filterFairBtn').addEventListener('click', function() {
+                filterByClass('Fair');
+            });
+            
+            document.getElementById('filterPoorBtn').addEventListener('click', function() {
+                filterByClass('Poor');
+            });
+            
+            function filterByClass(className) {
+                const tableRows = document.querySelectorAll('#patientPredictionsTable tbody tr');
+                
+                tableRows.forEach(row => {
+                    const predictedClass = row.querySelector('td:nth-child(4) span').textContent.trim();
+                    if (predictedClass === className) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            }
         });
     </script>
 </body>

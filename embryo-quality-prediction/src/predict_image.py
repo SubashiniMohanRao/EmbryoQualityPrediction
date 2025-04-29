@@ -317,14 +317,14 @@ class EmbryoPredictor:
         Predict the class of an embryo image.
         
         Args:
-            image_path (str): Path to the image file
+            image_path (str): Path to image file
             patient_name (str, optional): Name of the patient
             
         Returns:
-            dict: Prediction results including class, confidence, and all class probabilities
+            dict: Prediction result with class, confidence, and probabilities
         """
         try:
-            # Check if the image exists
+            # Check if image exists
             if not os.path.exists(image_path):
                 raise FileNotFoundError(f"Image file not found: {image_path}")
                 
@@ -334,6 +334,23 @@ class EmbryoPredictor:
             if self.class_names is None or len(self.class_names) == 0:
                 raise ValueError("Class names not properly initialized")
             
+            # Make sure patient_name is not an empty string
+            if patient_name is not None and patient_name.strip() == "":
+                patient_name = None
+            
+            # Convert absolute path to relative path for storage
+            # First, try to get relative path from workspace
+            rel_image_path = image_path
+            try:
+                rel_image_path = os.path.relpath(image_path, PROJECT_ROOT)
+                # If the path starts with "..", it's outside the project root
+                if rel_image_path.startswith(".."):
+                    # Just use the filename as a fallback
+                    rel_image_path = os.path.basename(image_path)
+            except ValueError:
+                # If there was an error (different drives), just use the basename
+                rel_image_path = os.path.basename(image_path)
+                
             # Preprocess image
             img_tensor = self.preprocess_image(image_path)
             if img_tensor is None:
@@ -378,7 +395,8 @@ class EmbryoPredictor:
                 
                 # Create result dictionary
                 result = {
-                    'image_path': image_path,
+                    'image_path': rel_image_path,  # Save relative path instead of absolute
+                    'original_image_path': image_path,  # Keep original path for reference
                     'patient_name': patient_name,
                     'predicted_class_index': int(predicted_class),  # Ensure this is an integer
                     'predicted_class': self.class_names[predicted_class],
@@ -445,20 +463,43 @@ class EmbryoPredictor:
             os.makedirs(output_dir, exist_ok=True)
         
         # Create filename from image name and timestamp
-        image_name = os.path.basename(prediction['image_path'])
+        # Use original path for file operations if available, otherwise use image_path
+        image_path_for_ops = prediction.get('original_image_path', prediction['image_path'])
+        image_name = os.path.basename(image_path_for_ops)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_file = os.path.join(output_dir, f"pred_{image_name}_{timestamp}.json")
         
+        # Make a copy of the prediction to save to file
+        file_prediction = prediction.copy()
+        
+        # For file storage, we can keep both paths
+        if 'original_image_path' in file_prediction:
+            file_prediction['abs_image_path'] = file_prediction['original_image_path']
+            # Delete original_image_path to avoid confusion
+            del file_prediction['original_image_path']
+        
         # Save to file
         with open(output_file, 'w') as f:
-            json.dump(prediction, f, indent=4)
+            json.dump(file_prediction, f, indent=4)
         
         result['file_path'] = output_file
         
         # Save to database if requested
         if save_to_database:
             try:
-                prediction_id = save_to_db(prediction, db_config)
+                # Create a copy of the prediction for database storage
+                db_prediction = prediction.copy()
+                
+                # Make sure we're using the relative path for database storage
+                if 'original_image_path' in db_prediction:
+                    # Delete original_image_path since we don't need it in the database
+                    del db_prediction['original_image_path']
+                
+                # Ensure patient_name is properly handled
+                if db_prediction.get('patient_name') == '':
+                    db_prediction['patient_name'] = None
+                
+                prediction_id = save_to_db(db_prediction, db_config)
                 if prediction_id:
                     result['database_id'] = prediction_id
                     print(f"Saved prediction to database with ID: {prediction_id}")
@@ -466,6 +507,8 @@ class EmbryoPredictor:
                     print("Failed to save prediction to database")
             except Exception as e:
                 print(f"Error saving to database: {e}")
+                import traceback
+                traceback.print_exc()
         
         return result
 
