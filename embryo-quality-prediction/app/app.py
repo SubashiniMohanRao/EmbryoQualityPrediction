@@ -708,5 +708,189 @@ def view_docs(doc_name):
         return redirect(url_for('index'))
 
 
+@app.route('/batch_validate', methods=['GET', 'POST'])
+def batch_validate_images():
+    """Validate multiple embryo images using the trained model."""
+    try:
+        # Ensure all required directories exist
+        AppConfig.ensure_dirs()
+        
+        # Log request information for debugging
+        if request.method == 'POST':
+            print(f"\n{'='*50}")
+            print("BATCH VALIDATION REQUEST")
+            print(f"Content Type: {request.content_type}")
+            print(f"Content Length: {request.content_length}")
+            print(f"Form Data Keys: {list(request.form.keys())}")
+            print(f"Files Keys: {list(request.files.keys())}")
+            print(f"Files Count: {len(request.files.getlist('files[]'))}")
+            print(f"{'='*50}\n")
+        
+        # Get list of available models
+        models = []
+        for model_file in glob.glob(os.path.join(AppConfig.MODELS_DIR, "*.pth")):
+            model_name = os.path.basename(model_file)
+            models.append({
+                'name': model_name,
+                'path': model_file,
+                'modified': datetime.fromtimestamp(os.path.getmtime(model_file)).strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        # Sort models by modification time (newest first)
+        models.sort(key=lambda x: x['modified'], reverse=True)
+        
+        # Handle file upload
+        if request.method == 'POST':
+            # Check if model is selected
+            model_path = request.form.get('model_path')
+            if not model_path and models:
+                model_path = models[0]['path']
+                print(f"No model specified, using default: {model_path}")
+            
+            # Check if files were uploaded
+            if 'files[]' not in request.files:
+                error_msg = 'No files were uploaded. Please select at least one image file.'
+                print(f"Error: {error_msg}")
+                flash(error_msg, 'danger')
+                return redirect(request.url)
+            
+            files = request.files.getlist('files[]')
+            print(f"Files received: {len(files)}")
+            
+            # Validate files
+            if not files or all(f.filename == '' for f in files):
+                error_msg = 'No files were selected. Please choose at least one image file to upload.'
+                print(f"Error: {error_msg}")
+                flash(error_msg, 'danger')
+                return redirect(request.url)
+            
+            # Initialize predictor with selected model
+            try:
+                print(f"Initializing predictor with model: {model_path}")
+                predictor = EmbryoPredictor(model_path)
+            except Exception as e:
+                error_msg = f"Error initializing predictor: {str(e)}"
+                print(f"Error: {error_msg}")
+                flash(error_msg, "danger")
+                import traceback
+                traceback.print_exc()
+                return redirect(request.url)
+            
+            results = []
+            error_messages = []
+            
+            for i, file in enumerate(files):
+                print(f"Processing file {i+1}/{len(files)}: {file.filename}")
+                if file and AppConfig.allowed_file(file.filename):
+                    try:
+                        # Generate a unique filename
+                        filename = secure_filename(file.filename)
+                        unique_filename = f"{uuid.uuid4()}_{filename}"
+                        file_path = os.path.join(AppConfig.UPLOAD_DIR, unique_filename)
+                        
+                        # Save the file
+                        print(f"Saving file to: {file_path}")
+                        file.save(file_path)
+                        
+                        # Resize image to max 300x300 if needed
+                        try:
+                            from PIL import Image
+                            img = Image.open(file_path)
+                            img.thumbnail((300, 300))
+                            img.save(file_path)
+                            print(f"Resized image to max 300x300")
+                        except Exception as e:
+                            print(f"Warning: Could not resize image: {str(e)}")
+                        
+                        # Make prediction
+                        print(f"Making prediction for {filename}")
+                        result = predictor.predict(file_path)
+                        if result is None:
+                            raise ValueError(f"Prediction returned None result for {filename}")
+                        
+                        # Generate XAI visualization
+                        try:
+                            print(f"Generating XAI visualization")
+                            _, transform = get_transforms()
+                            xai_result = generate_xai_visualization(
+                                model=predictor.model,
+                                image_path=file_path,
+                                transform=transform,
+                                class_names=predictor.class_names,
+                                device=predictor.device
+                            )
+                        except Exception as e:
+                            print(f"Warning: Could not generate XAI visualization for {filename}: {e}")
+                            xai_result = None
+                        
+                        # Save prediction
+                        try:
+                            predictor.save_prediction(result)
+                            print(f"Saved prediction")
+                        except Exception as e:
+                            print(f"Warning: Could not save prediction for {filename}: {e}")
+                        
+                        # Convert image to base64 for display
+                        try:
+                            with open(file_path, "rb") as image_file:
+                                encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
+                            print(f"Encoded image to base64")
+                        except Exception as e:
+                            error_msg = f"Error encoding image {filename}: {str(e)}"
+                            print(f"Error: {error_msg}")
+                            error_messages.append(error_msg)
+                            continue
+                        
+                        # Add result to list
+                        results.append({
+                            'filename': filename,
+                            'result': result,
+                            'image_data': encoded_image,
+                            'xai_data': xai_result['xai_image'] if xai_result else None
+                        })
+                        print(f"Added result for {filename}")
+                        
+                    except Exception as e:
+                        error_msg = f"Error processing {file.filename}: {str(e)}"
+                        print(f"Error: {error_msg}")
+                        error_messages.append(error_msg)
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    error_msg = f"Invalid file type for {file.filename}. Allowed types: {', '.join(AppConfig.ALLOWED_EXTENSIONS)}"
+                    print(f"Error: {error_msg}")
+                    error_messages.append(error_msg)
+            
+            if results:
+                # Show any errors that occurred during processing
+                print(f"Processing complete. Successful results: {len(results)}, Errors: {len(error_messages)}")
+                for error in error_messages:
+                    flash(error, 'warning')
+                
+                # Get model name from the path
+                model_name = os.path.basename(model_path) if model_path else "Default Model"
+                
+                return render_template('batch_validation_results.html', 
+                                       results=results,
+                                       model_name=model_name)
+            else:
+                # If no results were processed, show all errors
+                print("No valid results were processed")
+                for error in error_messages:
+                    flash(error, 'danger')
+                return redirect(request.url)
+        
+        # GET request - show upload form
+        return render_template('batch_validate.html', models=models)
+    
+    except Exception as e:
+        # Catch-all exception handler
+        error_msg = f"Unexpected error in batch validation: {str(e)}"
+        print(f"CRITICAL ERROR: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        flash(error_msg, 'danger')
+        return redirect(url_for('index'))
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

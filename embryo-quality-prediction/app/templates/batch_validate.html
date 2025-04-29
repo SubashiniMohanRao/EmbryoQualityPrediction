@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Validate Embryo Images - Embryo Quality Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            background-color: #4a6fa5;
+            color: white;
+            font-weight: bold;
+            border-radius: 10px 10px 0 0 !important;
+        }
+        .btn-primary {
+            background-color: #4a6fa5;
+            border-color: #4a6fa5;
+        }
+        .btn-primary:hover {
+            background-color: #3a5a8f;
+            border-color: #3a5a8f;
+        }
+        .file-upload {
+            position: relative;
+            overflow: hidden;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .file-upload input[type=file] {
+            position: absolute;
+            top: 0;
+            right: 0;
+            min-width: 100%;
+            min-height: 100%;
+            font-size: 100px;
+            text-align: right;
+            filter: alpha(opacity=0);
+            opacity: 0;
+            outline: none;
+            background: white;
+            cursor: pointer;
+            display: block;
+        }
+        .file-upload-btn {
+            width: 100%;
+            margin: 0;
+            color: #fff;
+            background: #4a6fa5;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            transition: all .2s ease;
+            outline: none;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .file-upload-content {
+            display: none;
+            text-align: center;
+        }
+        .file-upload-input {
+            position: absolute;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .image-upload-wrap {
+            margin-top: 20px;
+            border: 4px dashed #4a6fa5;
+            position: relative;
+            border-radius: 10px;
+        }
+        .image-dropping,
+        .image-upload-wrap:hover {
+            background-color: #e9f0f8;
+            border: 4px dashed #3a5a8f;
+        }
+        .image-title-wrap {
+            padding: 0 15px 15px 15px;
+            color: #222;
+        }
+        .drag-text {
+            text-align: center;
+            padding: 60px 0;
+        }
+        .drag-text h3 {
+            font-weight: 100;
+            color: #4a6fa5;
+            padding: 60px 0;
+        }
+        .file-upload-image {
+            max-height: 200px;
+            max-width: 200px;
+            margin: auto;
+            padding: 20px;
+        }
+        /* Loading Spinner */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+            color: white;
+            display: none;
+        }
+        .spinner {
+            width: 4rem;
+            height: 4rem;
+            margin-bottom: 1rem;
+        }
+        .loading-text {
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .preview-item {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .preview-item .remove-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 12px;
+            color: #dc3545;
+        }
+        .model-selection-card {
+            margin-bottom: 20px;
+        }
+        .validation-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .feature-card {
+            flex: 1;
+            min-width: 200px;
+            padding: 15px;
+            border-radius: 10px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #4a6fa5;
+        }
+        
+        /* New styles for drag and drop */
+        .upload-area {
+            border: 2px dashed #4a6fa5;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            background-color: #e9f0f8;
+            border-color: #3a5a8f;
+        }
+        .upload-icon {
+            font-size: 48px;
+            color: #4a6fa5;
+            margin-bottom: 10px;
+        }
+        .preview-image-container {
+            position: relative;
+            margin-bottom: 15px;
+        }
+        .preview-image {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .remove-image {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #dc3545;
+            font-size: 14px;
+            z-index: 10;
+        }
+        /* File item styles */
+        .file-item {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #fff;
+            position: relative;
+        }
+        .file-item img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        .file-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #dc3545;
+            border: 1px solid #dc3545;
+            z-index: 5;
+        }
+        .delete-btn:hover {
+            background-color: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Spinner Overlay -->
+    <div class="spinner-overlay" id="spinnerOverlay">
+        <div class="spinner-border spinner text-light" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="loading-text" id="spinnerMessage">Processing images...</div>
+    </div>
+    
+    <div class="container">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="display-4">Embryo Quality Prediction</h1>
+                <h2 class="text-muted">Batch Validate Embryo Images</h2>
+            </div>
+        </div>
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Navigation -->
+        <div class="row mb-4">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('validate_image') }}">Validate Single Image</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Batch Validate Images</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+        
+        <!-- Features Overview -->
+        <div class="row mb-4">
+            <div class="col">
+                <div class="validation-features">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="bi bi-images"></i>
+                        </div>
+                        <h5>Multiple Images</h5>
+                        <p>Upload and process multiple embryo images at once</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="bi bi-aspect-ratio"></i>
+                        </div>
+                        <h5>Auto Resize</h5>
+                        <p>Images automatically resized to optimal dimensions</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="bi bi-graph-up"></i>
+                        </div>
+                        <h5>Detailed Results</h5>
+                        <p>View comprehensive prediction results for each image</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="bi bi-eye"></i>
+                        </div>
+                        <h5>XAI Visualization</h5>
+                        <p>See what regions influence the model's decision</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Upload Form with storage for collected files -->
+        <div class="row mb-4">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-images"></i> Upload Multiple Embryo Images for Validation
+                    </div>
+                    <div class="card-body">
+                        <form method="post" enctype="multipart/form-data" id="uploadForm">
+                            {% if models %}
+                            <div class="mb-4">
+                                <label for="model_select" class="form-label">Select Model for Prediction</label>
+                                <select class="form-select" id="model_select" name="model_path">
+                                    {% for model in models %}
+                                    <option value="{{ model.path }}" {% if loop.first %}selected{% endif %}>
+                                        {{ model.name }} ({{ model.modified }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Choose the model to use for embryo quality prediction.</div>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle-fill"></i> No models found. Please train a model first or download pre-trained models.
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Hidden file input for batch uploads -->
+                            <input type="file" id="fileInput" name="files[]" accept="image/*" multiple style="display: none;">
+                            
+                            <div class="mb-4">
+                                <label class="form-label"><i class="bi bi-images"></i> Select Multiple Embryo Images</label>
+                                <div class="card p-3 bg-light">
+                                    <div class="upload-area" id="uploadArea">
+                                        <div class="upload-icon">
+                                            <i class="bi bi-cloud-arrow-up-fill"></i>
+                                        </div>
+                                        <h5>Drag & Drop Files Here</h5>
+                                        <p>or</p>
+                                        <button type="button" class="btn btn-primary px-4 py-2" id="browseBtn">
+                                            <i class="bi bi-file-earmark-image"></i> Browse Files
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- File previews will be displayed here -->
+                                    <div id="fileContainer" class="mt-4">
+                                        <div id="emptyMessage" class="text-center text-muted">
+                                            <p>No files selected yet</p>
+                                        </div>
+                                        <div id="fileList" class="row"></div>
+                                    </div>
+                                    
+                                    <!-- File counter and action buttons -->
+                                    <div id="fileActions" class="mt-3 text-center d-none">
+                                        <div class="alert alert-info">
+                                            <span id="fileCount">0</span> files selected
+                                            <button type="button" class="btn btn-sm btn-danger ms-2" id="clearBtn">
+                                                <i class="bi bi-trash"></i> Clear All
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 text-center">
+                                <button type="submit" class="btn btn-primary btn-lg px-5" id="validateBtn">
+                                    <i class="bi bi-check-circle"></i> Validate Images
+                                </button>
+                            </div>
+                            
+                            {% if not models %}
+                            <div class="mt-4 text-center">
+                                <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+                                    <i class="bi bi-arrow-left"></i> Return to Dashboard
+                                </a>
+                            </div>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Instructions -->
+        <div class="row mb-4">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-info-circle"></i> Instructions
+                    </div>
+                    <div class="card-body">
+                        <h5>How to Use the Batch Validation Tool</h5>
+                        <ol>
+                            <li>Select the model you want to use for prediction from the dropdown menu.</li>
+                            <li>Drag and drop multiple embryo images into the upload area, or click to select files.</li>
+                            <li>Review the image previews and remove any unwanted images.</li>
+                            <li>Click the "Validate Images" button to process all images.</li>
+                            <li>View the detailed results for each image, including prediction confidence and explanations.</li>
+                        </ol>
+                        
+                        <h5>About Image Processing</h5>
+                        <ul>
+                            <li>Images will be automatically resized to 300x300 pixels for optimal processing.</li>
+                            <li>Supported file formats: JPG, JPEG, PNG, TIF, TIFF.</li>
+                            <li>For best results, use clear, well-focused embryo images with good lighting.</li>
+                            <li>The system will attempt to generate explainable AI visualizations for each prediction.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const uploadForm = document.getElementById('uploadForm');
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.getElementById('uploadArea');
+            const browseBtn = document.getElementById('browseBtn');
+            const fileList = document.getElementById('fileList');
+            const emptyMessage = document.getElementById('emptyMessage');
+            const fileActions = document.getElementById('fileActions');
+            const fileCount = document.getElementById('fileCount');
+            const clearBtn = document.getElementById('clearBtn');
+            const validateBtn = document.getElementById('validateBtn');
+            const spinnerOverlay = document.getElementById('spinnerOverlay');
+            const spinnerMessage = document.getElementById('spinnerMessage');
+            
+            // Store files in a collection that persists
+            let selectedFiles = [];
+            
+            // Add drag-and-drop functionality
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight() {
+                uploadArea.classList.add('dragover');
+            }
+            
+            function unhighlight() {
+                uploadArea.classList.remove('dragover');
+            }
+            
+            // Handle file browsing
+            browseBtn.addEventListener('click', () => fileInput.click());
+            
+            // Handle file drop
+            uploadArea.addEventListener('drop', function(e) {
+                const droppedFiles = e.dataTransfer.files;
+                if (droppedFiles.length > 0) {
+                    processNewFiles(droppedFiles);
+                }
+            });
+            
+            // Handle file selection through input
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    processNewFiles(this.files);
+                    // Clear input value to allow the same file to be selected again
+                    this.value = '';
+                }
+            });
+            
+            // Process newly added files
+            function processNewFiles(newFiles) {
+                const filesToAdd = [];
+                
+                // Check each file and add if not already selected
+                Array.from(newFiles).forEach(file => {
+                    // Check if file is already in the selection (by name)
+                    const isDuplicate = selectedFiles.some(existingFile => 
+                        existingFile.name === file.name && 
+                        existingFile.size === file.size
+                    );
+                    
+                    if (!isDuplicate && file.type.match('image.*')) {
+                        filesToAdd.push(file);
+                    }
+                });
+                
+                // Add new files to our collection
+                if (filesToAdd.length > 0) {
+                    selectedFiles = [...selectedFiles, ...filesToAdd];
+                    updateFileDisplay();
+                }
+            }
+            
+            // Update the file list display
+            function updateFileDisplay() {
+                // Clear the list
+                fileList.innerHTML = '';
+                
+                // Show/hide empty message
+                if (selectedFiles.length === 0) {
+                    emptyMessage.style.display = 'block';
+                    fileActions.classList.add('d-none');
+                } else {
+                    emptyMessage.style.display = 'none';
+                    fileActions.classList.remove('d-none');
+                    fileCount.textContent = selectedFiles.length;
+                    
+                    // Create preview for each file
+                    selectedFiles.forEach((file, index) => {
+                        const col = document.createElement('div');
+                        col.className = 'col-6 col-md-4 col-lg-3 mb-3';
+                        
+                        const fileItem = document.createElement('div');
+                        fileItem.className = 'file-item';
+                        
+                        // Delete button
+                        const deleteBtn = document.createElement('div');
+                        deleteBtn.className = 'delete-btn';
+                        deleteBtn.innerHTML = '<i class="bi bi-x"></i>';
+                        deleteBtn.dataset.index = index;
+                        deleteBtn.addEventListener('click', () => removeFile(index));
+                        
+                        // Image preview
+                        const img = document.createElement('img');
+                        img.alt = file.name;
+                        
+                        // Loading state
+                        const spinner = document.createElement('div');
+                        spinner.className = 'spinner-border spinner-border-sm text-primary';
+                        spinner.setAttribute('role', 'status');
+                        spinner.innerHTML = '<span class="visually-hidden">Loading...</span>';
+                        
+                        // Create image preview when ready
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            img.src = e.target.result;
+                            fileItem.querySelector('.spinner-border')?.remove();
+                        };
+                        reader.readAsDataURL(file);
+                        
+                        // File name display
+                        const fileName = document.createElement('div');
+                        fileName.className = 'file-name';
+                        fileName.textContent = file.name;
+                        fileName.title = file.name;
+                        
+                        // Assemble the item
+                        fileItem.appendChild(deleteBtn);
+                        fileItem.appendChild(img);
+                        if (spinner) fileItem.appendChild(spinner);
+                        fileItem.appendChild(fileName);
+                        col.appendChild(fileItem);
+                        fileList.appendChild(col);
+                    });
+                }
+            }
+            
+            // Remove a file from selection
+            function removeFile(index) {
+                selectedFiles.splice(index, 1);
+                updateFileDisplay();
+            }
+            
+            // Clear all files
+            clearBtn.addEventListener('click', function() {
+                selectedFiles = [];
+                updateFileDisplay();
+            });
+            
+            // Form submission handler
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Check if files are selected
+                if (selectedFiles.length === 0) {
+                    alert('Please select at least one image file to upload.');
+                    return;
+                }
+                
+                // Disable the validate button
+                validateBtn.disabled = true;
+                validateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+                
+                // Show the spinner overlay
+                spinnerOverlay.style.display = 'flex';
+                spinnerMessage.textContent = `Processing ${selectedFiles.length} image${selectedFiles.length !== 1 ? 's' : ''}... This may take a minute.`;
+                
+                // Create a fresh FormData object
+                const formData = new FormData();
+                
+                // Add the model selection
+                const modelSelect = document.getElementById('model_select');
+                if (modelSelect) {
+                    formData.append('model_path', modelSelect.value);
+                }
+                
+                // Log the selected model for debugging
+                console.log('Using model:', modelSelect ? modelSelect.value : 'default model');
+                
+                // Add all selected files
+                selectedFiles.forEach((file, index) => {
+                    formData.append('files[]', file);
+                    console.log(`Adding file ${index+1}/${selectedFiles.length}: ${file.name} (${file.size} bytes)`);
+                });
+                
+                // Get the full URL for the form submission
+                const formAction = uploadForm.action || window.location.href;
+                console.log('Submitting to:', formAction);
+                
+                // Use regular form submission as fallback in case fetch fails
+                const useDirectSubmit = function() {
+                    console.log('Falling back to direct form submission');
+                    
+                    // Create a temporary form
+                    const tempForm = document.createElement('form');
+                    tempForm.method = 'POST';
+                    tempForm.action = formAction;
+                    tempForm.enctype = 'multipart/form-data';
+                    tempForm.style.display = 'none';
+                    
+                    // Add model selection
+                    if (modelSelect) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'model_path';
+                        input.value = modelSelect.value;
+                        tempForm.appendChild(input);
+                    }
+                    
+                    // We need to recreate the file input
+                    const tempFileInput = document.createElement('input');
+                    tempFileInput.type = 'file';
+                    tempFileInput.name = 'files[]';
+                    tempFileInput.multiple = true;
+                    tempFileInput.style.display = 'none';
+                    
+                    // Create a DataTransfer to add our files
+                    const dt = new DataTransfer();
+                    selectedFiles.forEach(file => dt.items.add(file));
+                    tempFileInput.files = dt.files;
+                    
+                    tempForm.appendChild(tempFileInput);
+                    document.body.appendChild(tempForm);
+                    
+                    // Submit the form
+                    tempForm.submit();
+                };
+                
+                // First try with fetch API
+                try {
+                    fetch(formAction, {
+                        method: 'POST',
+                        body: formData,
+                        // Add credentials to ensure cookies are sent
+                        credentials: 'same-origin'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => {
+                                throw new Error(`Server error (${response.status}): ${text || 'Unknown error'}`);
+                            });
+                        }
+                        return response.text();
+                    })
+                    .then(html => {
+                        // Success! Replace the page content with the response
+                        document.documentElement.innerHTML = html;
+                    })
+                    .catch(error => {
+                        console.error('Fetch failed:', error);
+                        
+                        // Show error message
+                        alert(`Error submitting form: ${error.message}\nTrying alternative submission method...`);
+                        
+                        // Fall back to direct form submission
+                        useDirectSubmit();
+                    });
+                } catch (error) {
+                    console.error('Error in fetch initialization:', error);
+                    alert(`Network error: ${error.message}\nTrying alternative submission method...`);
+                    
+                    // Fall back to direct form submission
+                    useDirectSubmit();
+                }
+            });
+            
+            // Initialize display
+            updateFileDisplay();
+        });
+    </script>
+</body>
+</html>

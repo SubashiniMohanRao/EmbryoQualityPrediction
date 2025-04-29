@@ -151,10 +151,15 @@
                             </div>
                             <div class="col-md-3">
                                 <h5>Validate Embryo Images</h5>
-                                <p>Test model on individual embryo images</p>
-                                <a href="{{ url_for('validate_image') }}" class="btn btn-outline-success" onclick="showSpinner('Loading image validation tool...')">
-                                    <i class="bi bi-image"></i> Validate Images
-                                </a>
+                                <p>Test model on embryo images</p>
+                                <div class="d-grid gap-2">
+                                    <a href="{{ url_for('validate_image') }}" class="btn btn-outline-success mb-2" onclick="showSpinner('Loading image validation tool...')">
+                                        <i class="bi bi-image"></i> Single Image
+                                    </a>
+                                    <a href="{{ url_for('batch_validate_images') }}" class="btn btn-outline-success" onclick="showSpinner('Loading batch validation tool...')">
+                                        <i class="bi bi-images"></i> Batch Validation
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
