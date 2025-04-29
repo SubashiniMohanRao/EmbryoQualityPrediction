@@ -334,9 +334,27 @@ class EmbryoPredictor:
             if self.class_names is None or len(self.class_names) == 0:
                 raise ValueError("Class names not properly initialized")
             
-            # Make sure patient_name is not an empty string
-            if patient_name is not None and patient_name.strip() == "":
-                patient_name = None
+            # Make sure patient_name is not an empty string or whitespace
+            if patient_name is None:
+                print("Patient name is None in predict method")
+            elif isinstance(patient_name, str):
+                if patient_name.strip() == "":
+                    print("Patient name is empty or whitespace in predict method, setting to None")
+                    patient_name = None
+                else:
+                    print(f"Using patient name in predict method: '{patient_name}'")
+            else:
+                # Convert to string if it's some other type
+                try:
+                    patient_name = str(patient_name).strip()
+                    if not patient_name:
+                        print("Converted patient name is empty, setting to None")
+                        patient_name = None
+                    else:
+                        print(f"Using converted patient name: '{patient_name}'")
+                except:
+                    print("Error converting patient_name to string, setting to None")
+                    patient_name = None
             
             # Convert absolute path to relative path for storage
             # First, try to get relative path from workspace
@@ -496,7 +514,40 @@ class EmbryoPredictor:
                     del db_prediction['original_image_path']
                 
                 # Ensure patient_name is properly handled
+                patient_name = db_prediction.get('patient_name')
+                print(f"Initial patient_name in save_prediction: {patient_name!r} (type: {type(patient_name).__name__ if patient_name is not None else 'None'})")
+                
+                if patient_name is None:
+                    print("Patient name is already None")
+                elif patient_name == '':
+                    print("Empty string patient_name detected, setting to None")
+                    db_prediction['patient_name'] = None
+                elif isinstance(patient_name, str) and patient_name.strip() == '':
+                    print("Whitespace-only patient_name detected, setting to None")
+                    db_prediction['patient_name'] = None
+                elif isinstance(patient_name, str):
+                    # Ensure the patient name is properly trimmed
+                    db_prediction['patient_name'] = patient_name.strip()
+                    print(f"Using trimmed patient name: '{db_prediction['patient_name']}'")
+                else:
+                    # Try to convert to string if it's some other type
+                    try:
+                        converted = str(patient_name).strip()
+                        if not converted:
+                            print("Converted patient_name is empty, setting to None")
+                            db_prediction['patient_name'] = None
+                        else:
+                            db_prediction['patient_name'] = converted
+                            print(f"Using converted patient name: '{db_prediction['patient_name']}'")
+                    except:
+                        print("Error converting patient_name to string, setting to None")
+                        db_prediction['patient_name'] = None
+                
+                print(f"Final patient name being saved to DB: {db_prediction.get('patient_name')!r}")
+                
+                # Extra safety check - force to None if empty string
                 if db_prediction.get('patient_name') == '':
+                    print("Empty string still detected, forcing to None")
                     db_prediction['patient_name'] = None
                 
                 prediction_id = save_to_db(db_prediction, db_config)

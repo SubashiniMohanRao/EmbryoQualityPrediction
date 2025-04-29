@@ -694,6 +694,13 @@
                     formData.append('model_path', modelSelect.value);
                 }
                 
+                // Add patient name if provided
+                const patientNameInput = document.getElementById('patient_name');
+                if (patientNameInput && patientNameInput.value.trim()) {
+                    formData.append('patient_name', patientNameInput.value.trim());
+                    console.log(`Adding patient name to FormData: ${patientNameInput.value.trim()}`);
+                }
+                
                 // Log the selected model for debugging
                 console.log('Using model:', modelSelect ? modelSelect.value : 'default model');
                 
@@ -725,6 +732,16 @@
                         input.name = 'model_path';
                         input.value = modelSelect.value;
                         tempForm.appendChild(input);
+                    }
+                    
+                    // Add patient name if provided
+                    if (patientNameInput && patientNameInput.value.trim()) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'patient_name';
+                        input.value = patientNameInput.value.trim();
+                        tempForm.appendChild(input);
+                        console.log(`Adding patient name to form: ${patientNameInput.value.trim()}`);
                     }
                     
                     // We need to recreate the file input

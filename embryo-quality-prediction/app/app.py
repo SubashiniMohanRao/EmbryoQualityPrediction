@@ -537,15 +537,38 @@ def validate_image():
             model_path = models[0]['path']
             
         # Get patient name if provided
-        patient_name = request.form.get('patient_name', '').strip()
-        print(f"Original patient name from form: '{patient_name}' (length: {len(patient_name)})")
+        patient_name = request.form.get('patient_name', '')
+        print(f"Raw patient name from form: '{patient_name}' (type: {type(patient_name).__name__})")
         
-        # Only set patient_name to None if it's actually empty
-        if not patient_name:
-            print("Patient name is empty, setting to None")
+        # Ensure patient_name is a string
+        if patient_name is None:
+            print("Patient name is None")
             patient_name = None
+        elif isinstance(patient_name, str):
+            patient_name = patient_name.strip()
+            print(f"Stripped patient name: '{patient_name}' (length: {len(patient_name)})")
+            
+            # Only set patient_name to None if it's actually empty after stripping
+            if not patient_name:
+                print("Patient name is empty after stripping, setting to None")
+                patient_name = None
+            else:
+                print(f"Using patient name: '{patient_name}'")
         else:
-            print(f"Using patient name: '{patient_name}'")
+            # Convert to string if it's some other type
+            patient_name = str(patient_name).strip()
+            if not patient_name:
+                print("Converted patient name is empty, setting to None")
+                patient_name = None
+            else:
+                print(f"Using converted patient name: '{patient_name}'")
+                
+        print(f"Final patient name to be passed to predictor: '{patient_name}'")
+        
+        # Force to None if empty string (extra safety)
+        if patient_name == '':
+            print("Empty string detected, forcing to None")
+            patient_name = None
         
         # Log the patient name for debugging
         print(f"Form submitted with patient name: '{patient_name}' (type: {type(patient_name).__name__ if patient_name is not None else 'None'})")
@@ -906,8 +929,38 @@ def batch_validate_images():
                     print(f"ResNet152_final.pth not found, using first available model: {model_path}")
                     
             # Get patient name if provided
-            patient_name = request.form.get('patient_name')
-            print(f"Patient name: {patient_name if patient_name else 'Not provided'}")
+            patient_name = request.form.get('patient_name', '')
+            print(f"Raw patient name from form: '{patient_name}' (type: {type(patient_name).__name__})")
+            
+            # Ensure patient_name is a string
+            if patient_name is None:
+                print("Patient name is None")
+                patient_name = None
+            elif isinstance(patient_name, str):
+                patient_name = patient_name.strip()
+                print(f"Stripped patient name: '{patient_name}' (length: {len(patient_name)})")
+                
+                # Only set patient_name to None if it's actually empty after stripping
+                if not patient_name:
+                    print("Patient name is empty after stripping, setting to None")
+                    patient_name = None
+                else:
+                    print(f"Using patient name: '{patient_name}'")
+            else:
+                # Convert to string if it's some other type
+                patient_name = str(patient_name).strip()
+                if not patient_name:
+                    print("Converted patient name is empty, setting to None")
+                    patient_name = None
+                else:
+                    print(f"Using converted patient name: '{patient_name}'")
+                    
+            print(f"Final patient name to be passed to predictor: '{patient_name}'")
+            
+            # Force to None if empty string (extra safety)
+            if patient_name == '':
+                print("Empty string detected, forcing to None")
+                patient_name = None
             
             # Check if files were uploaded
             if 'files[]' not in request.files:

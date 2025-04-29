@@ -119,9 +119,16 @@ class DatabaseConnection:
                 DECLARE v_class_name VARCHAR(100);
                 DECLARE v_probability FLOAT;
                 DECLARE v_max_index INT;
+                DECLARE v_patient_name VARCHAR(100);
                 
                 -- Debug output to see received values
                 SELECT 'Received patient_name:', p_patient_name;
+                
+                -- Handle patient_name properly
+                SET v_patient_name = CASE 
+                    WHEN p_patient_name = '' THEN NULL
+                    ELSE p_patient_name
+                END;
                 
                 -- Start transaction
                 START TRANSACTION;
@@ -136,7 +143,7 @@ class DatabaseConnection:
                     timestamp
                 ) VALUES (
                     p_image_path,
-                    p_patient_name,  -- This will use NULL if p_patient_name is NULL
+                    v_patient_name,  -- Use our processed patient name
                     p_predicted_class_index,
                     p_predicted_class,
                     p_confidence,
@@ -206,13 +213,37 @@ class DatabaseConnection:
             patient_name = prediction.get('patient_name')
             print(f"Initial patient_name in save_prediction_to_db: {patient_name!r} (type: {type(patient_name).__name__ if patient_name is not None else 'None'})")
             
-            if patient_name == '':
+            if patient_name is None:
+                print("Patient name is already None")
+            elif patient_name == '':
                 print("Empty string patient_name detected, setting to None")
                 patient_name = None
-            elif patient_name is not None and patient_name.strip() == '':
+            elif isinstance(patient_name, str) and patient_name.strip() == '':
                 print("Whitespace-only patient_name detected, setting to None")
                 patient_name = None
+            elif isinstance(patient_name, str):
+                # Ensure the patient name is properly trimmed
+                patient_name = patient_name.strip()
+                print(f"Using trimmed patient name: '{patient_name}'")
+            else:
+                # Try to convert to string if it's some other type
+                try:
+                    converted = str(patient_name).strip()
+                    if not converted:
+                        print("Converted patient_name is empty, setting to None")
+                        patient_name = None
+                    else:
+                        patient_name = converted
+                        print(f"Using converted patient name: '{patient_name}'")
+                except:
+                    print("Error converting patient_name to string, setting to None")
+                    patient_name = None
             
+            # Extra safety check - force to None if empty string
+            if patient_name == '':
+                print("Empty string still detected, forcing to None")
+                patient_name = None
+                
             print(f"Final patient_name in save_prediction_to_db: {patient_name!r}")
             
             print(f"\n==== DATABASE SAVE OPERATION ====")
@@ -294,11 +325,13 @@ def save_prediction(prediction, db_config=None):
     print(f"\n=== SAVE_PREDICTION DEBUG ===")
     print(f"Initial patient_name: {patient_name!r} (type: {type(patient_name).__name__})")
     
-    # Make sure patient_name is None if it's an empty string
-    if patient_name == '':
+    # Make sure patient_name is None if it's an empty string or only whitespace
+    if patient_name is None:
+        print("Patient name is already None")
+    elif patient_name == '':
         print("Empty string patient_name detected, setting to None")
         prediction['patient_name'] = None
-    elif patient_name is not None and patient_name.strip() == '':
+    elif isinstance(patient_name, str) and patient_name.strip() == '':
         print("Whitespace-only patient_name detected, setting to None")
         prediction['patient_name'] = None
     
