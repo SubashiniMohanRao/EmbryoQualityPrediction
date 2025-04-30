@@ -334,7 +334,7 @@
                                         <td>{{ "%.2f"|format(prediction.confidence * 100) }}%</td>
                                         <td>{{ prediction.timestamp }}</td>
                                         <td>
-                                            <a href="{{ url_for('patient_report', prediction_id=prediction.id) }}" class="btn btn-sm btn-primary">
+                                            <a href="{{ url_for('patient_report', prediction_id=prediction.id) }}" class="btn btn-sm btn-primary" onclick="showSpinner('Loading patient report...')">
                                                 <i class="bi bi-file-text"></i> View Report
                                             </a>
                                         </td>

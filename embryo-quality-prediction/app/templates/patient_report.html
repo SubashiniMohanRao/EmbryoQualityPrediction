@@ -192,8 +192,10 @@
         
         <!-- Prediction Result -->
         <div class="row mb-4">
+            <!-- Left column for images -->
             <div class="col-md-5">
-                <div class="card h-100">
+                <!-- Original Image -->
+                <div class="card mb-4">
                     <div class="card-header">
                         <i class="bi bi-image"></i> Embryo Image
                     </div>
@@ -201,7 +203,22 @@
                         <img src="{{ url_for('uploaded_file', filename=prediction.filename) }}" class="patient-image" alt="Patient Embryo Image">
                     </div>
                 </div>
+                
+                <!-- XAI Visualization (if available) -->
+                {% if xai_data %}
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-eye"></i> Heatmap Visualization
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="data:image/png;base64,{{ xai_data }}" class="patient-image" alt="XAI Heatmap Visualization">
+                        <p class="mt-2 text-muted"><small>Regions influencing the prediction are highlighted</small></p>
+                    </div>
+                </div>
+                {% endif %}
             </div>
+            
+            <!-- Right column for prediction results -->
             <div class="col-md-7">
                 <div class="card h-100">
                     <div class="card-header">
@@ -315,6 +332,15 @@
         function hideSpinner() {
             document.getElementById('spinnerOverlay').style.display = 'none';
         }
+        
+        // Show spinner when page is loading
+        document.addEventListener('DOMContentLoaded', function() {
+            // Hide spinner when page is fully loaded
+            hideSpinner();
+        });
+        
+        // Show spinner immediately when script runs
+        showSpinner('Loading patient report...');
         
         // Function to download the report as PDF
         function downloadPDF() {

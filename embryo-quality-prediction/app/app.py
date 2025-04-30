@@ -1270,9 +1270,46 @@ def patient_report(prediction_id):
         else:
             prediction['filename'] = ''
         
+        # Generate XAI visualization (heatmap) if image path exists
+        xai_data = None
+        if prediction.get('image_path') and os.path.exists(prediction['image_path']):
+            try:
+                print(f"Generating XAI visualization for {prediction['image_path']}")
+                # Find latest model
+                model_path = find_latest_model(AppConfig.MODELS_DIR)
+                if model_path:
+                    # Initialize predictor
+                    predictor = EmbryoPredictor(model_path)
+                    
+                    # Generate XAI visualization
+                    _, transform = get_transforms()
+                    xai_result = generate_xai_visualization(
+                        model=predictor.model,
+                        image_path=prediction['image_path'],
+                        transform=transform,
+                        class_names=predictor.class_names,
+                        device=predictor.device
+                    )
+                    
+                    # Get the XAI image data
+                    if xai_result and 'xai_image' in xai_result:
+                        xai_data = xai_result['xai_image']
+                        print("XAI visualization generated successfully")
+                    else:
+                        print("XAI result does not contain xai_image")
+                else:
+                    print("No model found for XAI visualization")
+            except Exception as e:
+                print(f"Error generating XAI visualization: {str(e)}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"Image path not found or invalid: {prediction.get('image_path')}")
+        
         return render_template('patient_report.html', 
                               prediction=prediction, 
-                              probabilities=probabilities)
+                              probabilities=probabilities,
+                              xai_data=xai_data)
     
     except Exception as e:
         print(f"Error in patient_report: {str(e)}")
