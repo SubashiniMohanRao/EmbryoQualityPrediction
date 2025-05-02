@@ -209,15 +209,7 @@
                     <div class="card-body">
                         <form method="post" enctype="multipart/form-data">
                             {% if models %}
-                            <div class="mb-4">
-                                <label for="model_select" class="form-label">Select Model for Prediction</label>
-                                <select class="form-select" id="model_select" name="model_path">
-                                    {% for model in models %}
-                                    <option value="{{ model.path }}">{{ model.name }} ({{ model.modified }})</option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">Choose the model you want to use for prediction.</div>
-                            </div>
+                            <input type="hidden" name="model_path" value="{{ models[0].path }}">
                             <div class="mb-4">
                                 <label for="patient_name" class="form-label">Patient Name (optional)</label>
                                 <input type="text" class="form-control" id="patient_name" name="patient_name" placeholder="Enter patient name for identification">

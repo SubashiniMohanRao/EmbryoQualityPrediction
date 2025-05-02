@@ -387,33 +387,14 @@
                     <div class="card-body">
                         <form method="post" enctype="multipart/form-data" id="uploadForm">
                             {% if models %}
-                            <div class="mb-4">
-                                <label for="model_select" class="form-label">Select Model for Prediction</label>
-                                <select class="form-select" id="model_select" name="model_path">
-                                    {% for model in models %}
-                                    <option value="{{ model.path }}" 
-                                        {% if default_model_index is defined and default_model_index == loop.index0 %}
-                                            selected
-                                        {% elif default_model_index is not defined and loop.first %}
-                                            selected
-                                        {% endif %}>
-                                        {{ model.name }} ({{ model.modified }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">Choose the model to use for embryo quality prediction. Default: ResNet152.</div>
-                            </div>
+                            <input type="hidden" name="model_path" value="{{ models[0].path }}">
+                            {% endif %}
                             
                             <div class="mb-4">
                                 <label for="patient_name" class="form-label"><i class="bi bi-person"></i> Patient Name (optional)</label>
                                 <input type="text" class="form-control" id="patient_name" name="patient_name" placeholder="Enter patient name for identification">
                                 <div class="form-text">Providing a patient name helps organize and identify prediction results.</div>
                             </div>
-                            {% else %}
-                            <div class="alert alert-warning">
-                                <i class="bi bi-exclamation-triangle-fill"></i> No models found. Please train a model first or download pre-trained models.
-                            </div>
-                            {% endif %}
                             
                             <!-- Hidden file input for batch uploads -->
                             <input type="file" id="fileInput" name="files[]" accept="image/*" multiple style="display: none;">
