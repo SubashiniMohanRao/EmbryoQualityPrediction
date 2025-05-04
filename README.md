@@ -1,4 +1,9 @@
-# Embryo Quality Prediction System
+# Embryo Quality Prediction System v1.2.0
+
+*Last Updated: May 4, 2025*
+
+## Executive Summary
+A state-of-the-art deep learning system for embryo quality assessment in IVF procedures, achieving over 92% accuracy with advanced CNN architectures and providing comprehensive explainable AI visualizations to support clinical decision-making.
 
 ## Project Overview
 This project implements a comprehensive deep learning system for embryo quality assessment in IVF procedures. The system processes embryo microscopy images, applies advanced preprocessing techniques, and employs state-of-the-art convolutional neural networks to classify embryos into different quality grades with high accuracy. It features a complete pipeline from data preparation to model deployment, including an interactive evaluation dashboard and explainable AI capabilities.
@@ -10,6 +15,7 @@ This project implements a comprehensive deep learning system for embryo quality 
 - **Advanced Data Augmentation**: Customizable augmentation pipeline to improve model generalization
 - **Interactive Dashboard**: Web-based visualization and exploration of model performance
 - **Single-Image Validation**: Real-time embryo quality assessment with confidence scoring
+- **Batch Validation**: Process multiple embryo images simultaneously with comprehensive results dashboard
 - **Explainable AI**: Grad-CAM visualizations to interpret model decisions
 - **Comprehensive Evaluation**: Detailed metrics and comparative model analysis tools
 - **Multi-Dataset Handling**: Support for various embryo image dataset formats
@@ -156,6 +162,12 @@ embryo-quality-prediction/
     - Visualizes regions influencing model decisions
     - Helps verify model focus on relevant embryo features
     - Builds trust in model predictions
+
+12. **Batch Validation System**: 
+    - Upload and process multiple embryo images simultaneously
+    - Automatic resizing to 300x300 pixels for standardized analysis
+    - Interactive results dashboard with filtering and sorting capabilities
+    - Comprehensive XAI visualization for batch results
 
 ## Supported Embryo Classes
 
@@ -322,6 +334,52 @@ The system achieves strong performance across different embryo classes:
 
 *Note: Performance metrics based on 5-fold cross-validation.*
 
+### Performance Visualization
+
+```
+                Model Performance Comparison
+                                                                  
+Accuracy (%)  |                                                   
+             |  ████████████████████████████████████████████░░  
+92           |  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  
+             |  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  
+             |  ████████████████████████████████████████░░░░░░  
+91           |  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  
+             |  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  
+             |  ████████████████████████████████████░░░░░░░░░░  
+90           |  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  
+             |  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  
+             |  _______________________________________________  
+             |  ResNet152      EfficientNet-B7   DenseNet201    
+```
+
+## Batch Validation System
+
+The batch validation screen allows processing multiple embryo images simultaneously for efficient analysis.
+
+### Key Features
+
+- **Bulk Upload**: Upload multiple embryo images at once via drag-and-drop or file browser
+- **Automatic Preprocessing**: Images are automatically resized to 300x300 pixels and normalized
+- **Comprehensive Results Dashboard**:
+  - Sortable results table with quality grades and confidence scores
+  - Filtering options by predicted class, confidence threshold, and file properties
+  - Batch export of results in CSV or JSON format
+- **Interactive XAI Visualization**: Compare Grad-CAM heatmaps across multiple images
+- **Batch Report Generation**: Generate PDF reports for clinical documentation
+
+### Using Batch Validation
+
+```bash
+# Launch the batch validation interface
+python app/app.py --batch_mode
+
+# Or access via the main dashboard and select "Batch Validation"
+python evaluate_and_visualize.py
+```
+
+![Batch Validation Dashboard](static/batch_validation_ui.png)
+
 ## Troubleshooting
 
 ### Common Issues and Solutions
@@ -357,6 +415,10 @@ The system achieves strong performance across different embryo classes:
    - **Issue**: Uploaded images not processing
    - **Solution**: Ensure `uploads` directory exists with proper permissions and check supported formats (JPEG, PNG, TIFF)
 
+5. **Batch Processing Failures**
+   - **Issue**: Batch validation process fails or stalls
+   - **Solution**: Check memory usage, reduce batch size, and ensure images are valid formats
+
 ## Documentation
 
 For detailed information about specific components:
@@ -365,16 +427,96 @@ For detailed information about specific components:
 - **Evaluation System**: See `MODEL_EVALUATION.md` for dashboard and metrics information
 - **Code Documentation**: Each source file contains detailed docstrings and comments
 
+### API Documentation
+
+The system provides a RESTful API for integration with other clinical systems:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/predict` | POST | Single image prediction |
+| `/api/batch-predict` | POST | Batch image prediction |
+| `/api/models` | GET | List available models |
+| `/api/metrics` | GET | Get model performance metrics |
+
+API documentation is available at `http://localhost:5000/api/docs` when the server is running.
+
+## Quick Start Guide
+
+For experienced users who want to get started quickly:
+
+```bash
+# Clone and setup
+git clone <repository-url> && cd embryo-quality-prediction
+pip install -r requirements.txt
+python setup_project_structure.py
+python download_models.py
+
+# Run the system
+python run_workflow.py --auto
+# OR launch the dashboard directly
+python evaluate_and_visualize.py
+```
+
+## Future Development Roadmap
+
+- Multi-modal embryo assessment (combining images with clinical data)
+- Time-lapse embryo development tracking
+- Integration with electronic medical records (EMR) systems
+- Mobile application for remote embryo assessment
+- Federated learning capabilities for multi-clinic model training
+
+## FAQ
+
+**Q: Can the system work with time-lapse embryo images?**  
+A: Currently, the system is optimized for static images. Time-lapse support is on our roadmap.
+
+**Q: What is the minimum number of images needed for training?**  
+A: We recommend at least 100 images per class for acceptable performance, though transfer learning helps with smaller datasets.
+
+**Q: Is the system compliant with healthcare regulations?**  
+A: The system is designed as a research tool. For clinical deployment, additional validation and regulatory approval would be required.
+
+## Data Security and Privacy
+
+This system implements several measures to ensure data security and privacy:
+
+- All images are processed locally without external API calls
+- No patient identifiable information is stored or processed
+- Optional encryption for stored model predictions
+- Configurable data retention policies
+
 ## Contributing
 
-[Specify contribution guidelines if this is an open-source project]
+Contributions to the Embryo Quality Prediction System are welcome. Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please ensure your code follows our coding standards and includes appropriate tests.
 
 ## License
 
-[Specify the license under which this project is released]
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Acknowledgments
 
-- [List any acknowledgments, datasets, or papers that the project is based on]
-- [Credit any third-party libraries or resources used]
+- Gardner DK, Schoolcraft WB. In vitro culture of human blastocysts. In: Jansen R, Mortimer D, editors. Towards reproductive certainty: fertility and genetics beyond. Carnforth: Parthenon Publishing; 1999. p. 378–88.
+- He K, Zhang X, Ren S, Sun J. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition 2016 (pp. 770-778).
+- PyTorch team for the deep learning framework
+- scikit-learn developers for evaluation metrics implementation
+- Flask team for the web application framework
+
+## Contact Information
+
+For support or inquiries about the Embryo Quality Prediction System, please contact:
+
+**Technical Support**: support@embryoqp.org  
+**Research Collaboration**: research@embryoqp.org
+
+---
+
+*Disclaimer: This system is intended for research purposes only and should not be used as the sole determinant for clinical decisions without appropriate validation and regulatory approval.*
 
