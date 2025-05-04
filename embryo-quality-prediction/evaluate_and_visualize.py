@@ -34,9 +34,9 @@ def main():
         
         try:
             subprocess.run(eval_cmd, check=True)
-            print("\n✅ Model evaluation completed successfully!")
+            print("\n[SUCCESS] Model evaluation completed successfully!")
         except subprocess.CalledProcessError as e:
-            print(f"\n❌ Error during model evaluation: {e}")
+            print(f"\n[ERROR] Error during model evaluation: {e}")
             if not args.dashboard_only:
                 sys.exit(1)
     
@@ -47,8 +47,8 @@ def main():
         print("=" * 80)
         
         dashboard_url = f"http://localhost:{args.port}"
-        print(f"\n🌐 Dashboard will be available at: {dashboard_url}")
-        print("📊 Opening web browser automatically...")
+        print(f"\n[INFO] Dashboard will be available at: {dashboard_url}")
+        print("[INFO] Opening web browser automatically...")
         
         # Start the Flask app in a new process
         flask_cmd = [
@@ -77,9 +77,9 @@ def main():
         try:
             subprocess.run(flask_cmd, env=env, check=True)
         except KeyboardInterrupt:
-            print("\n👋 Dashboard server stopped")
+            print("\n[INFO] Dashboard server stopped")
         except subprocess.CalledProcessError as e:
-            print(f"\n❌ Error launching dashboard: {e}")
+            print(f"\n[ERROR] Error launching dashboard: {e}")
             sys.exit(1)
 
 if __name__ == "__main__":
